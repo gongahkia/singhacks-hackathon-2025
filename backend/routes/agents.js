@@ -3,35 +3,54 @@ const express = require('express');
 const router = express.Router();
 const agentService = require('../services/agent-service');
 
-// Register agent
-router.post('/', async (req, res) => {
+// Register a new agent
+router.post('/', async (req, res, next) => {
   try {
-    const agent = await agentService.registerAgent(req.body);
-    res.status(201).json(agent);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+    const { name, capabilities, metadata } = req.body;
+    if (!name || !capabilities || !Array.isArray(capabilities) || capabilities.length === 0) {
+      return res.status(400).json({ error: 'Name and capabilities array are required' });
+    }
+    const result = await agentService.registerAgent(name, capabilities, metadata || '');
+    res.json(result);
+  } catch (e) { next(e); }
 });
 
-// List all agents
-router.get('/', async (req, res) => {
+// Get all agents
+router.get('/', async (_req, res, next) => {
   try {
-    const agents = await agentService.listAgents();
-    res.json(agents);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const agents = await agentService.getAllAgents();
+    res.json({ agents, count: agents.length });
+  } catch (e) { next(e); }
 });
 
 // Search agents by capability
-router.get('/search', async (req, res) => {
+router.get('/search', async (req, res, next) => {
   try {
     const { capability } = req.query;
+    if (!capability) return res.status(400).json({ error: 'Capability parameter required' });
     const agents = await agentService.searchAgents(capability);
-    res.json(agents);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json({ agents, capability, count: agents.length });
+  } catch (e) { next(e); }
+});
+
+// Get specific agent
+router.get('/:address', async (req, res, next) => {
+  try {
+    const agent = await agentService.getAgent(req.params.address);
+    res.json(agent);
+  } catch (e) { next(e); }
+});
+
+// Update agent capabilities
+router.put('/capabilities', async (req, res, next) => {
+  try {
+    const { capabilities } = req.body;
+    if (!capabilities || !Array.isArray(capabilities)) {
+      return res.status(400).json({ error: 'Capabilities array required' });
+    }
+    const result = await agentService.updateCapabilities(capabilities);
+    res.json(result);
+  } catch (e) { next(e); }
 });
 
 module.exports = router;

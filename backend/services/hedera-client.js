@@ -1,14 +1,88 @@
 // services/hedera-client.js
-// Placeholder for Hedera SDK integration
-// You would use @hashgraph/sdk here
+const {
+  Client,
+  AccountId,
+  PrivateKey,
+  TopicCreateTransaction,
+  TopicMessageSubmitTransaction,
+  TopicMessageQuery,
+  Hbar
+} = require('@hashgraph/sdk');
 
-module.exports = {
-  createTopic: async (name) => {
-    // Dummy topic creation
-    return { topicId: '0.0.12345', name };
-  },
-  sendMessage: async (topicId, message) => {
-    // Dummy message send
-    return { topicId, message, status: 'sent' };
+class HederaClient {
+  constructor() {
+    this.client = null;
+    this.accountId = null;
+    this.privateKey = null;
+    this.initialize();
   }
-};
+
+  initialize() {
+    this.accountId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
+    this.privateKey = PrivateKey.fromString(process.env.HEDERA_PRIVATE_KEY);
+
+    if (process.env.HEDERA_NETWORK === 'testnet') {
+      this.client = Client.forTestnet();
+    } else if (process.env.HEDERA_NETWORK === 'mainnet') {
+      this.client = Client.forMainnet();
+    } else {
+      throw new Error('Invalid HEDERA_NETWORK');
+    }
+    this.client.setOperator(this.accountId, this.privateKey);
+  }
+
+  async createTopic(memo) {
+    const tx = await new TopicCreateTransaction()
+      .setTopicMemo(memo || 'Agent messages')
+      .setMaxTransactionFee(new Hbar(2))
+      .execute(this.client);
+    const receipt = await tx.getReceipt(this.client);
+    return receipt.topicId.toString();
+  }
+
+  async submitMessage(topicId, message) {
+    const tx = await new TopicMessageSubmitTransaction()
+      .setTopicId(topicId)
+      .setMessage(typeof message === 'string' ? message : JSON.stringify(message))
+      .execute(this.client);
+    const receipt = await tx.getReceipt(this.client);
+    return {
+      topicId,
+      sequenceNumber: receipt.topicSequenceNumber?.toString?.() || '0',
+      status: receipt.status.toString()
+    };
+  }
+
+  async subscribeToTopic(topicId, callback) {
+    new TopicMessageQuery()
+      .setTopicId(topicId)
+      .setStartTime(0)
+      .subscribe(this.client, null, (m) => {
+        const msg = Buffer.from(m.contents).toString();
+        callback({
+          consensusTimestamp: m.consensusTimestamp.toString(),
+          message: msg,
+          sequenceNumber: m.sequenceNumber.toString()
+        });
+      });
+  }
+
+  async queryMirrorNode(endpoint) {
+    const axios = require('axios');
+    const base = process.env.MIRROR_NODE_URL;
+    if (!base) throw new Error('MIRROR_NODE_URL not set');
+    const url = `${base}${endpoint}`;
+    const { data } = await axios.get(url);
+    return data;
+  }
+
+  async getTransaction(transactionId) {
+    return this.queryMirrorNode(`/transactions/${transactionId}`);
+  }
+
+  async getAccountTransactions(accountId, limit = 10) {
+    return this.queryMirrorNode(`/accounts/${accountId}/transactions?limit=${limit}`);
+  }
+}
+
+module.exports = new HederaClient();
