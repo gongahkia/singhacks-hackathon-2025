@@ -4,6 +4,86 @@
 
 ---
 
+## 📚 Documentation Structure
+
+This hackathon project includes **4 comprehensive guides** for your team:
+
+### 1. **[QUICKSTART.md](./QUICKSTART.md)** - Start Here! ⚡
+- **For**: Everyone
+- **Time**: 30 minutes
+- **Content**: 
+  - Environment setup
+  - Hedera account creation
+  - Project structure
+  - 48-hour timeline overview
+  - Testing procedures
+
+### 2. **[WEB3_GUIDE.md](./WEB3_GUIDE.md)** - Blockchain Developer 🔵
+- **For**: Developer 1 (Junior, Blockchain Lead)
+- **Time**: 45 minutes
+- **Content**:
+  - Smart contract development (AgentRegistry, PaymentProcessor)
+  - Solidity code examples
+  - Hardhat setup & deployment
+  - Contract testing
+  - Backend integration
+
+### 3. **[WEB2_GUIDE.md](./WEB2_GUIDE.md)** - Backend Developer 🟢
+- **For**: Developer 2 (Junior, Backend Lead)
+- **Time**: 45 minutes
+- **Content**:
+  - Express.js API development
+  - Hedera SDK integration
+  - HCS (Consensus Service) usage
+  - Service layer architecture
+  - REST API endpoints
+
+### 4. **[FRONTEND_GUIDE.md](./FRONTEND_GUIDE.md)** - UI Developers 🟡🟠
+- **For**: Developer 3 & 4 (Undergraduates)
+- **Time**: 45 minutes
+- **Content**:
+  - Next.js setup & structure
+  - React components
+  - Tailwind CSS styling
+  - API client integration
+  - Page development
+
+---
+
+## 🚀 Quick Start (5 Minutes)
+
+### Step 1: Read Documentation
+1. **Everyone**: Read [QUICKSTART.md](./QUICKSTART.md) first
+2. **Then read your role-specific guide**:
+   - Dev 1 (Web3): [WEB3_GUIDE.md](./WEB3_GUIDE.md)
+   - Dev 2 (Web2): [WEB2_GUIDE.md](./WEB2_GUIDE.md)
+   - Dev 3 & 4 (Frontend): [FRONTEND_GUIDE.md](./FRONTEND_GUIDE.md)
+
+### Step 2: Setup Environment
+```bash
+# 1. Create Hedera testnet account
+Visit: https://portal.hedera.com/
+
+# 2. Clone repository
+git clone <your-repo-url>
+cd hedera-agent-economy
+
+# 3. Install dependencies
+npm install
+cd contracts && npm install && cd ..
+cd backend && npm install && cd ..
+cd frontend && npm install && cd ..
+
+# 4. Configure .env (see QUICKSTART.md)
+```
+
+### Step 3: Start Building
+- Follow your hour-by-hour timeline in your role-specific guide
+- Communicate frequently with team
+- Test early and often
+
+---
+
 ## Challenge Summary
 
 **Goal**: Build a working prototype of an agentic system that uses **ERC-8004 for agent discovery and trust**, integrated with **x402 for secure on-chain payments**, showcasing autonomous agent-to-agent transactions on the Hedera testnet.
