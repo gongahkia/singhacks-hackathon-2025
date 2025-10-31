@@ -23,3 +23,11 @@ router.post('/topics/:topicId/messages', async (req, res, next) => {
 });
 
 module.exports = router;
+// Retrieve topic messages from mirror node
+router.get('/topics/:topicId/messages', async (req, res, next) => {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 25;
+    const data = await hederaClient.getTopicMessages(req.params.topicId, limit);
+    res.json(data);
+  } catch (e) { next(e); }
+});

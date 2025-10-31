@@ -83,6 +83,10 @@ class HederaClient {
   async getAccountTransactions(accountId, limit = 10) {
     return this.queryMirrorNode(`/accounts/${accountId}/transactions?limit=${limit}`);
   }
+
+  async getTopicMessages(topicId, limit = 25) {
+    return this.queryMirrorNode(`/topics/${topicId}/messages?limit=${limit}`);
+  }
 }
 
 module.exports = new HederaClient();
