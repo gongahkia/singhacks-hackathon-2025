@@ -1,3 +1,47 @@
+# Environment variables
 .env
 .env.local
+.env.*.local
+
+# Python
 .venv
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+*.log
+.cache/
+
+# Contracts
+contracts/artifacts/
+contracts/cache/
+contracts/typechain/
+contracts/.openzeppelin/
+contracts/deployment.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+temp/
+

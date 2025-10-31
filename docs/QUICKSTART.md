@@ -80,21 +80,34 @@ git --version
 
 ### Step 3: Setup Project (15 minutes)
 
+**Option A: Automated Setup (Recommended)**
 ```bash
 # 1. Clone repository
 git clone <your-repo-url>
 cd hedera-agent-economy
 
-# 2. Create project structure
-mkdir -p contracts/src contracts/scripts
-mkdir -p backend/routes backend/services
-mkdir -p frontend/app frontend/components
-mkdir -p tests docs
+# 2. Run setup script
+# On Linux/Mac:
+chmod +x setup.sh && ./setup.sh
 
-# 3. Install dependencies
-npm init -y
-npm install
+# On Windows:
+setup.bat
 
+# 3. Edit .env file (created from .env.example)
+# Fill in your Hedera account details
+```
+
+**Option B: Manual Setup**
+```bash
+# 1. Clone repository
+git clone <your-repo-url>
+cd hedera-agent-economy
+
+# 2. Copy .env.example to .env
+cp .env.example .env
+# Edit .env with your Hedera account details
+
+# 3. Create project structure (folders already exist, but dependencies needed)
 # For contracts
 cd contracts
 npm init -y
@@ -106,18 +119,26 @@ cd ..
 cd backend
 npm init -y
 npm install express cors dotenv @hashgraph/sdk ethers axios
+npm install --save-dev nodemon
 cd ..
 
-# For frontend
+# For frontend - choose your framework
+# See FRONTEND_GUIDE.md for framework-agnostic setup
 cd frontend
-npx create-next-app@latest . --typescript --tailwind --app
-npm install ethers @hashgraph/sdk zustand axios
-cd ..
+# Your choice: npx create-next-app, vite create, etc.
 ```
 
 ---
 
 ### Step 4: Configure Environment
+
+**⚠️ Important**: Hedera uses two key types:
+- **Ed25519** (default, DER format `302e...`): For Hedera SDK operations (HCS, HTS)
+- **ECDSA** (hex format `0x...`): For ethers.js smart contract interactions
+
+If you only have an Ed25519 key, you can:
+1. Generate an ECDSA key pair: `npx ethers wallet generate` (save the private key starting with `0x`)
+2. OR use a wallet that supports both (HashPack/Blade can derive both)
 
 Create `.env` in root:
 
@@ -125,7 +146,8 @@ Create `.env` in root:
 # Hedera Configuration
 HEDERA_NETWORK=testnet
 HEDERA_ACCOUNT_ID=0.0.xxxxx
-HEDERA_PRIVATE_KEY=302e020100300506032b657004220420xxxxx
+HEDERA_PRIVATE_KEY=302e020100300506032b657004220420xxxxx  # Ed25519 key (DER format) for Hedera SDK (HCS, HTS)
+EVM_PRIVATE_KEY=0x...  # ECDSA key (hex format) for ethers.js smart contract interactions
 
 # Network Configuration
 RPC_URL=https://testnet.hashio.io/api
@@ -280,6 +302,26 @@ curl -X POST http://localhost:3001/api/x402/verify -H "Content-Type: application
 ```
 
 ---
+
+## 🗓️ Day Plan & Team Sync Checklist
+
+### Day 1
+- [ ] 09:00 Kickoff: confirm roles, environment OK, .env values set
+- [ ] 10:00 Contracts compile; start deploy to testnet
+- [ ] 12:00 Backend health up; agents/payments/x402 endpoints reachable
+- [ ] 15:00 Frontend scaffolded; api-client wired; wallet connect works
+- [ ] 18:00 E2E slice: register agent → create escrow → release → HashScan
+
+### Day 2
+- [ ] 09:00 UX polish: filters, trust visuals, mobile responsiveness
+- [ ] 12:00 x402 flow UI + verification
+- [ ] 15:00 HCS timeline (if endpoint ready), real-time polling
+- [ ] 17:00 Demo dry-run; screenshots/video backup; architecture diagram
+
+### 15-min Syncs (Hour 12, 24, 36)
+- [ ] What’s completed
+- [ ] What’s next
+- [ ] Blockers/risk mitigation
 
 ## 🐛 Common Issues
 

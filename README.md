@@ -42,11 +42,11 @@ This hackathon project includes **4 comprehensive guides** for your team:
 - **For**: Developer 3 & 4 (Undergraduates)
 - **Time**: 45 minutes
 - **Content**:
-  - Next.js setup & structure
-  - React components
-  - Tailwind CSS styling
-  - API client integration
-  - Page development
+  - Framework-agnostic setup (choose React, Vue, Svelte, etc.)
+  - Required integration stubs for backend/Web3
+  - Wallet connection patterns (WalletConnect/HashPack/Blade)
+  - API client specifications
+  - Component and page requirements
 
 ---
 
@@ -81,6 +81,32 @@ cd frontend && npm install && cd ..
 - Follow your hour-by-hour timeline in your role-specific guide
 - Communicate frequently with team
 - Test early and often
+
+---
+
+## 🗺️ Hackathon Roadmap (Aligned to Scoring)
+
+### Day 1
+- Foundation (Feasibility, Technical Depth)
+  - Contracts: compile, deploy to testnet, export `deployment.json`
+  - Backend: health check, agents, payments, tokens, x402 challenge/verify
+  - Frontend: choose framework, scaffold, implement `api-client` + wallet connect
+  - Verify end-to-end: register agent, create escrow, release, view on HashScan
+
+### Day 2
+- Creativity + Visual Design + Reachability
+  - Agent directory: multi-capability filters, sort by trust/date
+  - Trust visuals: badges/charts, mobile responsiveness, animations
+  - Real-time UX: polling for agents/payments, toast notifications
+  - x402 full flow UI: challenge → pay → verify with clear steps
+  - HCS interaction timeline: show on-chain interaction logs
+
+### Cross-Team Syncs (15 min)
+- Hour 12, 24, 36: demo readiness checks; unblock issues; assign polish tasks
+
+### Deliverables for Judging
+- Live demo with: discovery, trust, payment, verification on HashScan
+- Docs: setup, endpoints, contract addresses, architecture diagram
 
 ---
 
@@ -285,13 +311,41 @@ Your submission will be evaluated on:
 
 ## 🚀 Getting Started
 
-1. **Set up Hedera testnet account** via the developer portal
-2. **Familiarize yourself** with ERC-8004 and x402 protocols
-3. **Explore the Hedera Agent Kit** and available SDKs
-4. **Design your unified agentic system** architecture
-5. **Implement ERC-8004 agent discovery** and trust mechanisms
-6. **Integrate x402 payment functionality** for autonomous transactions
-7. **Test autonomous agent-to-agent interactions** on Hedera testnet
-8. **Prepare comprehensive demo** with visual components and clear explanations
+### First 5 Minutes
+1. **Clone repository** and run setup: `./setup.sh` (Linux/Mac) or `setup.bat` (Windows)
+2. **Copy `.env.example` to `.env`** and fill in your Hedera account details
+3. **Read QUICKSTART.md** for full setup instructions
+
+### Next 30 Minutes
+4. **Set up Hedera testnet account** via the developer portal (https://portal.hedera.com/)
+5. **Generate ECDSA key** for ethers.js: `npx ethers wallet generate` (if needed)
+6. **Read your role-specific guide**:
+   - Dev 1: [WEB3_GUIDE.md](./WEB3_GUIDE.md)
+   - Dev 2: [WEB2_GUIDE.md](./WEB2_GUIDE.md)
+   - Dev 3 & 4: [FRONTEND_GUIDE.md](./FRONTEND_GUIDE.md)
+
+### Build Phase
+7. **Familiarize yourself** with ERC-8004 and x402 protocols
+8. **Implement core features** following your guide's roadmap
+9. **Test end-to-end** on Hedera testnet
+10. **Prepare demo** with visual components and clear explanations
 
 **Remember**: Focus on demonstrating autonomous agent interactions with real payments on the Hedera testnet. The goal is to showcase a working agentic digital economy that seamlessly integrates ERC-8004 and x402!
+
+---
+
+## 📁 Project Structure
+
+```
+hedera-agent-economy/
+├── contracts/          # 🔵 Dev 1: Smart contracts (Solidity/Hardhat)
+├── backend/            # 🟢 Dev 2: Express API (Node.js)
+├── frontend/           # 🟡🟠 Dev 3 & 4: UI (Your choice of framework)
+├── tests/              # Integration tests
+├── .env.example        # Environment template (copy to .env)
+├── setup.sh            # Automated setup (Linux/Mac)
+├── setup.bat           # Automated setup (Windows)
+└── README.md           # You are here
+```
+
+Each subdirectory has its own README.md with quick start instructions.

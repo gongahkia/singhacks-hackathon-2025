@@ -84,11 +84,19 @@ const hederaClient = require('./hedera-client');
 
 class TokenService {
   async associateToken(accountId, privateKey, tokenId) {
+    // Parse private key string to PrivateKey object if needed
+    const { PrivateKey } = require('@hashgraph/sdk');
+    const privateKeyObj = (typeof privateKey === 'string')
+      ? (privateKey.startsWith('0x') 
+          ? PrivateKey.fromStringECDSA(privateKey) 
+          : PrivateKey.fromString(privateKey))
+      : privateKey; // Already a PrivateKey object
+    
     const tx = await new TokenAssociateTransaction()
       .setAccountId(accountId)
       .setTokenIds([TokenId.fromString(tokenId)])
       .freezeWith(hederaClient.client)
-      .sign(privateKey);
+      .sign(privateKeyObj);
 
     const receipt = await (await tx.execute(hederaClient.client)).getReceipt(hederaClient.client);
     return { status: receipt.status.toString() };
@@ -101,11 +109,17 @@ class TokenService {
   }
 
   async transferToken(tokenId, fromId, fromKey, toId, amount) {
+    // Parse private key string to PrivateKey object
+    const { PrivateKey } = require('@hashgraph/sdk');
+    const privateKeyObj = fromKey.startsWith('0x') 
+      ? PrivateKey.fromStringECDSA(fromKey)  // ECDSA format
+      : PrivateKey.fromString(fromKey);     // Ed25519 DER format
+    
     const tx = await new TransferTransaction()
       .addTokenTransfer(tokenId, fromId, -amount)
       .addTokenTransfer(tokenId, toId, amount)
       .freezeWith(hederaClient.client)
-      .sign(fromKey);
+      .sign(privateKeyObj);
 
     const receipt = await (await tx.execute(hederaClient.client)).getReceipt(hederaClient.client);
     return { status: receipt.status.toString() };
@@ -188,11 +202,29 @@ router.post('/challenge', async (req, res) => {
 // Verify settlement via mirror node
 router.post('/verify', async (req, res, next) => {
   try {
-    const { txId } = req.body;
+    const { txId, expectedAmount, expectedPayTo } = req.body;
     if (!txId) return res.status(400).json({ error: 'txId required' });
+    
     const tx = await hederaClient.getTransaction(txId);
     const success = (tx.result === 'SUCCESS') || (tx.status === 'SUCCESS');
     if (!success) return res.status(400).json({ error: 'Settlement not found or failed' });
+    
+    // Enhanced verification: Check if payment matches challenge
+    // Look for crypto transfers to expectedPayTo with expectedAmount
+    if (expectedPayTo && expectedAmount) {
+      const transfers = tx.transfers || [];
+      const matchingTransfer = transfers.find(t => 
+        t.account === expectedPayTo && 
+        parseFloat(t.amount) >= parseFloat(expectedAmount)
+      );
+      if (!matchingTransfer) {
+        return res.status(400).json({ 
+          error: 'Payment amount or recipient mismatch',
+          expected: { payTo: expectedPayTo, amount: expectedAmount }
+        });
+      }
+    }
+    
     return res.json({ verified: true, tx });
   } catch (e) { next(e); }
 });
@@ -570,7 +602,9 @@ const deploymentInfo = require('../../contracts/deployment.json');
 class AgentService {
   constructor() {
     this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-    this.wallet = new ethers.Wallet(process.env.HEDERA_PRIVATE_KEY, this.provider);
+    // Use ECDSA key for ethers.js (EVM compatibility)
+    // HEDERA_PRIVATE_KEY is Ed25519 for Hedera SDK; EVM_PRIVATE_KEY is ECDSA for ethers
+    this.wallet = new ethers.Wallet(process.env.EVM_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY, this.provider);
     
     this.agentRegistry = new ethers.Contract(
       deploymentInfo.contracts.AgentRegistry,
@@ -720,7 +754,9 @@ const deploymentInfo = require('../../contracts/deployment.json');
 class PaymentService {
   constructor() {
     this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-    this.wallet = new ethers.Wallet(process.env.HEDERA_PRIVATE_KEY, this.provider);
+    // Use ECDSA key for ethers.js (EVM compatibility)
+    // HEDERA_PRIVATE_KEY is Ed25519 for Hedera SDK; EVM_PRIVATE_KEY is ECDSA for ethers
+    this.wallet = new ethers.Wallet(process.env.EVM_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY, this.provider);
     
     this.paymentProcessor = new ethers.Contract(
       deploymentInfo.contracts.PaymentProcessor,
@@ -1188,6 +1224,15 @@ Check `.env` file has correct values
 ### "Transaction reverted"
 Check contract is deployed and address is correct in deployment.json
 
+### "Invalid private key" or "invalid signature" with ethers.js
+- **Issue**: Using Ed25519 key (`302e...`) with `ethers.Wallet()` won't work
+- **Fix**: Use `EVM_PRIVATE_KEY` (ECDSA, starts with `0x`) for ethers.js operations
+- **Note**: Hedera SDK operations (HCS, HTS) should use `HEDERA_PRIVATE_KEY` (Ed25519)
+
+### "Cannot sign transaction" in token-service
+- **Issue**: Passing key string directly to `.sign()` instead of PrivateKey object
+- **Fix**: Parse key first: `PrivateKey.fromString(key)` or `PrivateKey.fromStringECDSA(key)` based on format
+
 ---
 
 ## 📚 Resources
@@ -1197,6 +1242,43 @@ Check contract is deployed and address is correct in deployment.json
 - **Ethers.js**: https://docs.ethers.org/v6/
 
 ---
+
+## 🗺️ Roadmap & Backend TODOs (Scoring-Aligned)
+
+### Day 1 (Foundation: Feasibility, Technical Depth)
+- [ ] Stand up `server.js` with health check and CORS
+- [ ] **KEY SETUP**: Configure `EVM_PRIVATE_KEY` (ECDSA, hex format `0x...`) for ethers.js; `HEDERA_PRIVATE_KEY` (Ed25519, DER format `302e...`) for Hedera SDK operations
+- [ ] Implement services: `hedera-client` (uses Ed25519), `agent-service` (uses ECDSA via ethers), `payment-service` (uses ECDSA via ethers)
+- [ ] Routes: `/api/agents`, `/api/payments`, `/api/messages`
+- [ ] Identity: `POST /api/auth/verify-signature` (wallet verifies)
+- [ ] Tokens: `/api/tokens/:accountId/balances/:tokenId`, `/api/tokens/transfer` (fix: parse private key string to PrivateKey object)
+- [ ] x402: `POST /api/x402/challenge`, `POST /api/x402/verify` (enhanced: verify payment amount and recipient match challenge)
+- [ ] E2E sanity: register agent, create escrow, release, verify on HashScan
+
+### Day 2 (Polish: Creativity, Reachability, Visual Design support)
+- [ ] Add HCS message retrieval for timelines:
+  - `GET /api/messages/topics/:topicId/messages` (mirror node fetch + normalize)
+- [ ] Add payment status endpoint:
+  - `GET /api/payments/status/:escrowId` (mirror node verify + status map)
+- [ ] Add pagination/filtering support to `/api/agents` and `/api/agents/search`
+- [ ] Logging & error shape: consistent `{ error, details? }` responses
+- [ ] Rate limits/basic validation (protect demo stability)
+- [ ] Enable simple polling hints (e.g., `updatedAt` in responses)
+
+### ⚠️ Important: Key Format Notes
+- **Hedera SDK operations** (HCS, HTS, native Hedera): Use `HEDERA_PRIVATE_KEY` (Ed25519 DER format)
+- **ethers.js operations** (smart contracts): Use `EVM_PRIVATE_KEY` (ECDSA hex format starting with `0x`)
+- **Token transfers**: Parse key string properly - detect format and use `PrivateKey.fromString()` or `PrivateKey.fromStringECDSA()`
+
+### Stretch (If Time)
+- [ ] WebSocket/SSE channel for real-time updates (agents/payments)
+- [ ] Caching layer for mirror node reads (in-memory)
+- [ ] Configurable topic IDs exposed via `/api/health`
+
+### Hand-off Guarantees to Frontend
+- [ ] Stable response shapes (documented above in routes)
+- [ ] HashScan-ready `txHash` where applicable
+- [ ] Clear error messages (actionable)
 
 **You're the glue between blockchain and frontend! 🚀**
 

@@ -1,0 +1,30 @@
+{
+  "name": "hedera-agent-economy",
+  "version": "1.0.0",
+  "description": "Autonomous agent discovery and payments on Hedera testnet using ERC-8004 and x402",
+  "private": true,
+  "scripts": {
+    "setup": "bash setup.sh || setup.bat",
+    "contracts:compile": "cd contracts && npx hardhat compile",
+    "contracts:deploy": "cd contracts && npx hardhat run scripts/deploy.js --network hedera_testnet",
+    "contracts:test": "cd contracts && npx hardhat test",
+    "backend:dev": "cd backend && npm run dev",
+    "backend:start": "cd backend && npm start",
+    "health": "curl http://localhost:3001/api/health || echo 'Backend not running'"
+  },
+  "keywords": [
+    "hedera",
+    "blockchain",
+    "agentic",
+    "erc-8004",
+    "x402",
+    "hackathon"
+  ],
+  "author": "Your Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "your-repo-url"
+  }
+}
+

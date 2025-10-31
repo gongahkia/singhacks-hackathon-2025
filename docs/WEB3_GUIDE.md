@@ -98,7 +98,9 @@ module.exports = {
   networks: {
     hedera_testnet: {
       url: process.env.RPC_URL || "https://testnet.hashio.io/api",
-      accounts: [process.env.HEDERA_PRIVATE_KEY],
+      // Hardhat/ethers expects ECDSA key (hex format starting with 0x)
+      // Use EVM_PRIVATE_KEY if available, fallback to HEDERA_PRIVATE_KEY
+      accounts: [process.env.EVM_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY],
       chainId: 296
     }
   }
@@ -901,6 +903,32 @@ npx hardhat run scripts/deploy.js --network hedera_testnet
 - **Hedera EVM**: https://docs.hedera.com/hedera/core-concepts/smart-contracts
 
 ---
+
+## 🗺️ Roadmap & Contracts TODOs (Scoring-Aligned)
+
+### Day 1 (Foundation: Technical Depth, Feasibility)
+- [ ] Hardhat setup, compile both contracts without errors
+- [ ] **KEY CHECK**: Ensure `EVM_PRIVATE_KEY` (ECDSA, `0x...`) is set for deployment; Hardhat/ethers require ECDSA format
+- [ ] Deploy to testnet; output `contracts/deployment.json`
+- [ ] Verify key functions: registerAgent, searchByCapability, createEscrow, releaseEscrow, getEscrow
+- [ ] Emit events required for indexing and HCS mirroring:
+  - `AgentRegistered(address,name,capabilities)`
+  - `AgentUpdated(address,newCapabilities)`
+  - `EscrowCreated(escrowId,payer,payee,amount,serviceDescription)`
+  - `EscrowCompleted(escrowId,amount)` / `EscrowRefunded(escrowId,amount)`
+- [ ] Provide ABIs/artifacts to backend (path stable)
+
+### Day 2 (Polish: Creativity, Reachability support)
+- [ ] Add view helpers for frontend (counts, lists) without extra gas:
+  - `getAgentCount()`, `getPayerEscrows(address)`, `getPayeeEscrows(address)`
+- [ ] Gas & safety review; ensure `nonReentrant` where needed
+- [ ] Document edge cases: duplicate registration, self-payment prevention
+- [ ] Finalize addresses in README section for HashScan inclusion
+
+### Stretch (If Time)
+- [ ] Trust score mutation controls (owner-only) with rationale docs
+- [ ] Minimal role separation if needed for demo clarity
+- [ ] Additional events for analytics (optional)
 
 ## 🎯 Success Criteria
 
