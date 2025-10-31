@@ -794,6 +794,33 @@ module.exports = new BlockchainClient();
 
 ---
 
+## 🔐 Identity Verification & Tokens (Required by README)
+
+### Signed Registration (Identity Verification)
+
+To satisfy identity verification, require frontend/backend to submit a signed message when registering an agent. The backend should verify the signature recovers the caller’s address before calling `registerAgent`. Suggested message schema:
+
+```json
+{
+  "action": "registerAgent",
+  "name": "<agentName>",
+  "capabilities": ["smart-contracts"],
+  "timestamp": "<iso>"
+}
+```
+
+Recovery and validation happen in backend (see WEB2 guide). No contract change is required.
+
+### Stablecoin & Multi-currency Support
+
+Stablecoin and fungible token transfers are handled via Hedera Token Service (HTS) at the service layer (see WEB2 guide token routes). The `PaymentProcessor` escrow handles native HBAR; tokens do not require changes to the contract for transfers.
+
+---
+
+## 👜 Wallets (WalletConnect) — No Contract Changes Needed
+
+Wallet-based verification uses signed messages validated in the backend; smart contracts remain unchanged. Payments can be initiated by the wallet (HBAR escrow) and tokens via HTS service routes. Keep contract interfaces simple and rely on off-chain signature checks for identity.
+
 ## ✅ Your Checklist
 
 ### Hour 0-3: Setup

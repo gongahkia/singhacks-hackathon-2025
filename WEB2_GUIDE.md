@@ -65,6 +65,150 @@ backend/
 
 ---
 
+## 🪙 HTS Stablecoin & Token Support (Required by README)
+
+Add token operations to handle stablecoin transfers and balances.
+
+### Token Service Utilities
+
+Create `services/token-service.js`:
+
+```javascript
+const {
+  TokenAssociateTransaction,
+  AccountBalanceQuery,
+  TransferTransaction,
+  TokenId,
+} = require('@hashgraph/sdk');
+const hederaClient = require('./hedera-client');
+
+class TokenService {
+  async associateToken(accountId, privateKey, tokenId) {
+    const tx = await new TokenAssociateTransaction()
+      .setAccountId(accountId)
+      .setTokenIds([TokenId.fromString(tokenId)])
+      .freezeWith(hederaClient.client)
+      .sign(privateKey);
+
+    const receipt = await (await tx.execute(hederaClient.client)).getReceipt(hederaClient.client);
+    return { status: receipt.status.toString() };
+  }
+
+  async getBalances(accountId, tokenId) {
+    const bal = await new AccountBalanceQuery().setAccountId(accountId).execute(hederaClient.client);
+    const tokenBalance = bal.tokens._map.get(TokenId.fromString(tokenId).toString()) || 0;
+    return { hbar: bal.hbars.toString(), tokenBalance };
+  }
+
+  async transferToken(tokenId, fromId, fromKey, toId, amount) {
+    const tx = await new TransferTransaction()
+      .addTokenTransfer(tokenId, fromId, -amount)
+      .addTokenTransfer(tokenId, toId, amount)
+      .freezeWith(hederaClient.client)
+      .sign(fromKey);
+
+    const receipt = await (await tx.execute(hederaClient.client)).getReceipt(hederaClient.client);
+    return { status: receipt.status.toString() };
+  }
+}
+
+module.exports = new TokenService();
+```
+
+### Token Routes
+
+Create `routes/tokens.js`:
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const tokenService = require('../services/token-service');
+
+// GET balances (HBAR + token)
+router.get('/:accountId/balances/:tokenId', async (req, res, next) => {
+  try {
+    const result = await tokenService.getBalances(req.params.accountId, req.params.tokenId);
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+// POST transfer fungible token
+router.post('/transfer', async (req, res, next) => {
+  try {
+    const { tokenId, fromId, fromKey, toId, amount } = req.body;
+    if (!tokenId || !fromId || !fromKey || !toId || !amount) {
+      return res.status(400).json({ error: 'tokenId, fromId, fromKey, toId, amount required' });
+    }
+    const result = await tokenService.transferToken(tokenId, fromId, fromKey, toId, Number(amount));
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+module.exports = router;
+```
+
+Wire it in `server.js`:
+
+```javascript
+const tokenRoutes = require('./routes/tokens');
+app.use('/api/tokens', tokenRoutes);
+```
+
+---
+
+## 💳 x402 Payment Flow (HTTP 402) (Required by README)
+
+Implement a minimal 402 challenge + settlement verification using Hedera.
+
+### x402 Routes
+
+Create `routes/x402.js`:
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const hederaClient = require('../services/hedera-client');
+
+// Issue 402 challenge
+router.post('/challenge', async (req, res) => {
+  const { amountHbar, memo } = req.body;
+  const challenge = {
+    status: 402,
+    payment: {
+      network: process.env.HEDERA_NETWORK || 'testnet',
+      asset: 'HBAR',
+      amount: amountHbar,
+      memo: memo || 'x402-payment',
+      payTo: hederaClient.accountId.toString(),
+    }
+  };
+  res.status(402).json(challenge);
+});
+
+// Verify settlement via mirror node
+router.post('/verify', async (req, res, next) => {
+  try {
+    const { txId } = req.body;
+    if (!txId) return res.status(400).json({ error: 'txId required' });
+    const tx = await hederaClient.getTransaction(txId);
+    const success = (tx.result === 'SUCCESS') || (tx.status === 'SUCCESS');
+    if (!success) return res.status(400).json({ error: 'Settlement not found or failed' });
+    return res.json({ verified: true, tx });
+  } catch (e) { next(e); }
+});
+
+module.exports = router;
+```
+
+Wire it in `server.js`:
+
+```javascript
+const x402Routes = require('./routes/x402');
+app.use('/api/x402', x402Routes);
+```
+
+---
+
 ## 🛠️ Setup (Hour 0-3)
 
 ### Install Dependencies
@@ -178,6 +322,58 @@ module.exports = app;
 npm run dev
 # Visit: http://localhost:3001/api/health
 ```
+
+---
+
+## 🔑 Wallet Verification (WalletConnect) — Identity
+
+Add a signature verification endpoint to confirm wallet ownership before sensitive actions (e.g., agent registration).
+
+### Message Schema (frontend signs)
+
+```json
+{
+  "action": "registerAgent",
+  "name": "<agentName>",
+  "capabilities": ["smart-contracts"],
+  "timestamp": "<iso-8601>"
+}
+```
+
+### Endpoint: `POST /api/auth/verify-signature`
+
+```javascript
+// routes/auth.js
+const express = require('express');
+const router = express.Router();
+const { ethers } = require('ethers');
+
+router.post('/verify-signature', async (req, res) => {
+  const { accountId, evmAddress, message, signature } = req.body;
+  if (!message || !signature) return res.status(400).json({ error: 'message and signature required' });
+
+  // Recover signer from signature
+  const recovered = ethers.verifyMessage(JSON.stringify(message), signature);
+  if (evmAddress && recovered.toLowerCase() !== evmAddress.toLowerCase()) {
+    return res.status(400).json({ verified: false, error: 'address mismatch' });
+  }
+
+  // Optionally map Hedera accountId ↔ evmAddress via mirror node if provided
+  // Accept if recovered address matches the expected wallet address
+  return res.json({ verified: true, recovered });
+});
+
+module.exports = router;
+```
+
+Wire it in `server.js`:
+
+```javascript
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
+```
+
+Usage: Frontend signs the JSON with the connected wallet and posts `{ accountId, evmAddress, message, signature }`. On success, proceed with `agent-service.registerAgent`.
 
 ---
 
@@ -891,6 +1087,23 @@ router.post('/topics/:topicId/messages', async (req, res, next) => {
 module.exports = router;
 ```
 
+### Token Routes (new)
+
+See `routes/tokens.js` above. Test quickly:
+
+```bash
+curl http://localhost:3001/api/tokens/{accountId}/balances/{tokenId}
+```
+
+### x402 Routes (new)
+
+Issue challenge and verify:
+
+```bash
+curl -X POST http://localhost:3001/api/x402/challenge -H "Content-Type: application/json" -d '{"amountHbar": "1"}' -i
+curl -X POST http://localhost:3001/api/x402/verify -H "Content-Type: application/json" -d '{"txId": "<transactionId>"}'
+```
+
 ---
 
 ## ✅ Your Checklist
@@ -919,17 +1132,24 @@ module.exports = router;
 - [ ] Test escrow creation
 - [ ] Test escrow release
 
+### Hour 12-18: Tokens & x402 (New)
+- [ ] Implement token-service and routes
+- [ ] Implement x402 challenge and verify endpoints
+- [ ] Add basic input validation
+
 ### Hour 18-24: Integration
 - [ ] Connect all services
 - [ ] Add error handling
 - [ ] Test all endpoints
 - [ ] Add logging
+ - [ ] Add mirror node verification loop for payments
 
 ### Day 2: Polish
 - [ ] Add validation
 - [ ] Optimize queries
 - [ ] Fix bugs
 - [ ] Add documentation
+ - [ ] Add identity verification for agent registration (signed message)
 
 ---
 

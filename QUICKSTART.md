@@ -139,6 +139,8 @@ NODE_ENV=development
 # Frontend Configuration
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_CHAIN_ID=296
+# Optional: default token id for stablecoin demos
+NEXT_PUBLIC_TOKEN_ID=0.0.xxxxx
 ```
 
 ---
@@ -265,6 +267,16 @@ npm run dev
 
 # Test APIs
 curl http://localhost:3001/api/health
+
+# Tokens (stablecoin) — replace placeholders
+curl "http://localhost:3001/api/tokens/0.0.<accountId>/balances/0.0.<tokenId>"
+curl -X POST http://localhost:3001/api/tokens/transfer \
+  -H "Content-Type: application/json" \
+  -d '{"tokenId":"0.0.<tokenId>","fromId":"0.0.<from>","fromKey":"<privateKey>","toId":"0.0.<to>","amount":5}'
+
+# x402 minimal flow
+curl -X POST http://localhost:3001/api/x402/challenge -H "Content-Type: application/json" -d '{"amountHbar":"1"}' -i
+curl -X POST http://localhost:3001/api/x402/verify -H "Content-Type: application/json" -d '{"txId":"<transactionId>"}'
 ```
 
 ---

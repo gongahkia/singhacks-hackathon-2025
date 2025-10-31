@@ -110,6 +110,43 @@ export default config;
 
 ---
 
+## 🔑 Wallet Connection & Signature (WalletConnect)
+
+Use a Hedera-compatible wallet (HashPack/Blade) via WalletConnect v2 for identity and token operations.
+
+### Identity (Sign Message)
+
+1) Connect wallet.
+2) Build message JSON:
+
+```json
+{
+  "action": "registerAgent",
+  "name": "<agentName>",
+  "capabilities": ["smart-contracts"],
+  "timestamp": "<iso-8601>"
+}
+```
+
+3) Ask wallet to sign the exact JSON string and POST to backend:
+
+```ts
+await fetch(`${API_URL}/api/auth/verify-signature`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ accountId, evmAddress, message, signature })
+});
+```
+
+On success, call `apiClient.registerAgent(...)`.
+
+### Tokens & Payments
+
+- Use wallet to sign/submit HTS token transfers (via backend route `/api/tokens/transfer`) and escrow payments (`/api/payments`).
+- For x402: call `apiClient.x402Challenge` → user pays → `apiClient.x402Verify` → update UI.
+
+---
+
 ## 📝 Shared Files (Both Devs)
 
 ### API Client
@@ -209,6 +246,42 @@ export const apiClient = {
     const response = await fetch(`${API_URL}/api/payments/payer/${address}`);
     if (!response.ok) throw new Error('Failed to fetch payments');
     return response.json();
+  },
+
+  // Token endpoints (stablecoin support)
+  async getBalances(accountId: string, tokenId: string) {
+    const res = await fetch(`${API_URL}/api/tokens/${accountId}/balances/${tokenId}`);
+    if (!res.ok) throw new Error('Failed to fetch balances');
+    return res.json();
+  },
+  async transferToken(params: { tokenId: string; fromId: string; fromKey: string; toId: string; amount: number; }) {
+    const res = await fetch(`${API_URL}/api/tokens/transfer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!res.ok) throw new Error('Token transfer failed');
+    return res.json();
+  },
+
+  // x402 endpoints
+  async x402Challenge(amountHbar: string, memo?: string) {
+    const res = await fetch(`${API_URL}/api/x402/challenge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountHbar, memo })
+    });
+    const data = await res.json();
+    return { status: res.status, ...data };
+  },
+  async x402Verify(txId: string) {
+    const res = await fetch(`${API_URL}/api/x402/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txId })
+    });
+    if (!res.ok) throw new Error('Verification failed');
+    return res.json();
   },
 
   // Health check
@@ -848,6 +921,10 @@ export default function PaymentsPage() {
 - [ ] Connect to backend API
 - [ ] Handle loading states
 - [ ] Handle errors
+
+**Hour 18-30: Tokens & x402 (New)**
+- [ ] Add token balances/transfer UI using `apiClient.getBalances/transferToken`
+- [ ] Add x402 flow (request challenge, pay, verify) basic UI
 
 **Hour 18-30: Features**
 - [ ] Add transaction list
