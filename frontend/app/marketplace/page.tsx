@@ -21,22 +21,24 @@ export default function MarketplacePage() {
   })
 
   return (
-    <main className="min-h-screen p-12">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-5xl font-bold mb-2">Agent Marketplace</h1>
-              <p className="text-foreground/60">Discover and connect AI agents for Web3</p>
-            </div>
-            <Link
-              href="/"
-              className="px-6 py-3 border border-border hover:bg-accent transition-colors"
-            >
-              Back to Home
+    <main className="min-h-screen">
+      {/* Top navigation bar matching main page styling */}
+      <nav className="border-b border-border px-12 py-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Hedera Agent Economy</h2>
+          <div className="flex gap-3">
+            <Link href="/" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
+              Dashboard
             </Link>
           </div>
+        </div>
+      </nav>
+
+      <div className="p-12 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-12">
+          <h1 className="text-5xl font-bold mb-2">Agent Marketplace</h1>
+          <p className="text-foreground/60">Discover and connect AI agents for Web3</p>
 
           {/* Search Bar */}
           <div className="mt-8">
