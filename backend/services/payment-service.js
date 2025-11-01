@@ -2,14 +2,14 @@
 const { ethers } = require('ethers');
 const hederaClient = require('./hedera-client');
 
-let PaymentProcessorABI = null;
-let deploymentInfo = null;
-let paymentProcessorAddressFromEnv = process.env.PAYMENT_PROCESSOR_ADDRESS;
+let PaymentProcessorABI;
+let deploymentInfo;
 try {
-  PaymentProcessorABI = require('../../contracts/artifacts/contracts/src/PaymentProcessor.sol/PaymentProcessor.json').abi;
+  PaymentProcessorABI = require('../../contracts/artifacts/src/PaymentProcessor.sol/PaymentProcessor.json').abi;
   deploymentInfo = require('../../contracts/deployment.json');
 } catch (_e) {
-  // Artifacts may not exist in dev; defer validation to runtime
+  PaymentProcessorABI = [];
+  deploymentInfo = { contracts: { PaymentProcessor: process.env.PAYMENT_PROCESSOR_ADDRESS || '0x0000000000000000000000000000000000000000' } };
 }
 
 class PaymentService {
@@ -21,15 +21,14 @@ class PaymentService {
 
   ensureContract() {
     if (this.paymentProcessor) return;
-    const { RPC_URL, EVM_PRIVATE_KEY } = process.env;
-    if (!RPC_URL) throw new Error('RPC_URL not set');
+    this.ensureProvider();
+    const { EVM_PRIVATE_KEY } = process.env;
     if (!EVM_PRIVATE_KEY || !EVM_PRIVATE_KEY.startsWith('0x')) {
       throw new Error('EVM_PRIVATE_KEY must be set (hex 0x...) for ethers operations');
     }
-    this.provider = new ethers.JsonRpcProvider(RPC_URL);
     this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
-    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || paymentProcessorAddressFromEnv;
-    if (!address) {
+    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+    if (!address || address === '0x0000000000000000000000000000000000000000') {
       throw new Error('PaymentProcessor address not configured. Provide contracts artifacts or set PAYMENT_PROCESSOR_ADDRESS');
     }
     if (!PaymentProcessorABI || PaymentProcessorABI.length === 0) {
@@ -38,39 +37,148 @@ class PaymentService {
     this.paymentProcessor = new ethers.Contract(address, PaymentProcessorABI, this.wallet);
   }
 
-  async createEscrow(payee, amountInHbar, description) {
-    this.ensureContract();
+  /**
+   * Create escrow payment
+   * @param {string} payee - Recipient agent address
+   * @param {number|string} amountInHbar - Amount in HBAR
+   * @param {string} description - Service description
+   * @param {string} [payerAgentAddress] - Payer agent address (must be registered). If not provided, uses backend wallet.
+   * @param {string} [payerPrivateKey] - Payer's EVM private key (required if payerAgentAddress is provided)
+   * @param {number} [expirationDays] - Escrow expiration days (default: 30)
+   * @returns {Promise<Object>} Escrow creation result
+   */
+  async createEscrow(payee, amountInHbar, description, payerAgentAddress = null, payerPrivateKey = null, expirationDays = 0) {
+    // If payer agent address provided, verify agent is registered and use their wallet
+    let walletToUse = null;
+    let contractToUse = null;
+    let payerAddress = null;
+
+    if (payerAgentAddress && payerPrivateKey) {
+      // Verify agent is registered
+      const agentService = require('./agent-service');
+      try {
+        const agent = await agentService.getAgent(payerAgentAddress);
+        if (!agent || !agent.isActive) {
+          throw new Error(`Agent ${payerAgentAddress} is not registered or inactive`);
+        }
+        payerAddress = payerAgentAddress;
+        
+        // Create wallet from payer's private key
+        this.ensureProvider();
+        let privateKey = payerPrivateKey;
+        if (!privateKey.startsWith('0x')) {
+          privateKey = '0x' + privateKey;
+        }
+        walletToUse = new ethers.Wallet(privateKey, this.provider);
+        
+        // Verify wallet address matches agent address
+        if (walletToUse.address.toLowerCase() !== payerAgentAddress.toLowerCase()) {
+          throw new Error(`Private key does not match agent address. Expected ${payerAgentAddress}, got ${walletToUse.address}`);
+        }
+
+        // Create contract instance with payer's wallet
+        const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+        if (!address || address === '0x0000000000000000000000000000000000000000') {
+          throw new Error('PaymentProcessor address not configured');
+        }
+        contractToUse = new ethers.Contract(address, PaymentProcessorABI, walletToUse);
+      } catch (error) {
+        if (error.message.includes('Agent') || error.message.includes('not found')) {
+          throw new Error(`Cannot create payment: ${error.message}. Ensure agent is registered via /api/agents`);
+        }
+        throw error;
+      }
+    } else {
+      // Use backend wallet (default behavior for backward compatibility)
+      this.ensureContract();
+      walletToUse = this.wallet;
+      contractToUse = this.paymentProcessor;
+      payerAddress = this.wallet.address;
+    }
+
+    // Convert HBAR to wei (18 decimals for EVM)
     const amount = ethers.parseEther(amountInHbar.toString());
-    const tx = await this.paymentProcessor.createEscrow(payee, description, { value: amount });
+    // Contract signature: createEscrow(address _payee, string _serviceDescription, uint256 _expirationDays)
+    // expirationDays: 0 = use default (30 days)
+    const tx = await contractToUse.createEscrow(payee, description, expirationDays, { value: amount });
     const receipt = await tx.wait();
 
     let escrowId = undefined;
     try {
       const log = receipt.logs.find(l => {
-        try { return this.paymentProcessor.interface.parseLog(l).name === 'EscrowCreated'; } catch { return false; }
+        try { return contractToUse.interface.parseLog(l).name === 'EscrowCreated'; } catch { return false; }
       });
-      if (log) escrowId = this.paymentProcessor.interface.parseLog(log).args.escrowId;
+      if (log) escrowId = contractToUse.interface.parseLog(log).args.escrowId;
     } catch {}
 
-    if (process.env.PAYMENT_TOPIC_ID) {
-      await hederaClient.submitMessage(process.env.PAYMENT_TOPIC_ID, JSON.stringify({
-        event: 'EscrowCreated', escrowId, payer: this.wallet.address, payee, amount: amountInHbar, timestamp: new Date().toISOString()
-      }));
-    }
-    return { success: true, escrowId, txHash: receipt.hash, amount: amountInHbar };
+    // HCS logging is mandatory - ensure topic exists
+    const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
+    await hederaClient.submitMessage(paymentTopicId, JSON.stringify({
+      event: 'EscrowCreated', escrowId, payer: payerAddress, payee, amount: amountInHbar, timestamp: new Date().toISOString()
+    }));
+    return { success: true, escrowId, txHash: receipt.hash, amount: amountInHbar, payer: payerAddress };
   }
 
-  async releaseEscrow(escrowId) {
-    this.ensureContract();
+  ensureProvider() {
+    if (this.provider) return;
+    const { RPC_URL } = process.env;
+    if (!RPC_URL) throw new Error('RPC_URL not set');
+    this.provider = new ethers.JsonRpcProvider(RPC_URL);
+  }
+
+  /**
+   * Release escrow payment
+   * @param {string} escrowId - Escrow ID to release
+   * @param {string} [releaserAgentAddress] - Agent address releasing (must be payer). If not provided, uses backend wallet.
+   * @param {string} [releaserPrivateKey] - Releaser's EVM private key (required if releaserAgentAddress is provided)
+   * @returns {Promise<Object>} Release result
+   * @note According to x402 standard, only the payer can release escrow to the payee
+   */
+  async releaseEscrow(escrowId, releaserAgentAddress = null, releaserPrivateKey = null) {
     // Get escrow details before release to establish trust
     const escrow = await this.getEscrow(escrowId);
+
+    // If releaser agent provided, verify and use their wallet
+    let contractToUse = null;
+    
+    if (releaserAgentAddress && releaserPrivateKey) {
+      // Verify agent is registered and is the payer (x402: only payer can release escrow)
+      if (releaserAgentAddress.toLowerCase() !== escrow.payer.toLowerCase()) {
+        throw new Error(`Only payer ${escrow.payer} can release this escrow. Got ${releaserAgentAddress}. This is required by x402 payment standard for security.`);
+      }
+      
+      const agentService = require('./agent-service');
+      const agent = await agentService.getAgent(releaserAgentAddress);
+      if (!agent || !agent.isActive) {
+        throw new Error(`Agent ${releaserAgentAddress} is not registered or inactive`);
+      }
+      
+      // Create wallet from releaser's private key
+      this.ensureProvider();
+      let privateKey = releaserPrivateKey;
+      if (!privateKey.startsWith('0x')) {
+        privateKey = '0x' + privateKey;
+      }
+      const wallet = new ethers.Wallet(privateKey, this.provider);
+      
+      if (wallet.address.toLowerCase() !== releaserAgentAddress.toLowerCase()) {
+        throw new Error(`Private key does not match agent address. Expected ${releaserAgentAddress}, got ${wallet.address}`);
+      }
+
+      const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+      contractToUse = new ethers.Contract(address, PaymentProcessorABI, wallet);
+    } else {
+      // Use backend wallet (default)
+      this.ensureContract();
+      contractToUse = this.paymentProcessor;
+    }
 
     // Convert escrowId to bytes32 format if it's a string
     const escrowIdBytes = ethers.isHexString(escrowId)
       ? escrowId
       : ethers.id(escrowId);
 
-    const tx = await this.paymentProcessor.releaseEscrow(escrowIdBytes);
+    const tx = await contractToUse.releaseEscrow(escrowIdBytes);
     const receipt = await tx.wait();
     
     // Establish trust from successful payment (ERC-8004)
@@ -86,15 +194,15 @@ class PaymentService {
       console.warn('Failed to establish trust from payment:', error.message);
     }
     
-    if (process.env.PAYMENT_TOPIC_ID) {
-      await hederaClient.submitMessage(process.env.PAYMENT_TOPIC_ID, JSON.stringify({ 
-        event: 'EscrowReleased', 
-        escrowId, 
-        payer: escrow.payer,
-        payee: escrow.payee,
-        timestamp: new Date().toISOString() 
-      }));
-    }
+    // HCS logging is mandatory - ensure topic exists
+    const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
+    await hederaClient.submitMessage(paymentTopicId, JSON.stringify({ 
+      event: 'EscrowReleased', 
+      escrowId, 
+      payer: escrow.payer,
+      payee: escrow.payee,
+      timestamp: new Date().toISOString() 
+    }));
     return { success: true, txHash: receipt.hash };
   }
 

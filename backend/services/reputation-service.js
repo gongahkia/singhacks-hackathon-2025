@@ -5,7 +5,7 @@ const hederaClient = require('./hedera-client');
 let AgentRegistryABI;
 let deploymentInfo;
 try {
-  AgentRegistryABI = require('../../contracts/artifacts/contracts/src/AgentRegistry.sol/AgentRegistry.json').abi;
+  AgentRegistryABI = require('../../contracts/artifacts/src/AgentRegistry.sol/AgentRegistry.json').abi;
   deploymentInfo = require('../../contracts/deployment.json');
 } catch (_e) {
   AgentRegistryABI = [];
@@ -55,18 +55,17 @@ class ReputationService {
       );
       const receipt = await tx.wait();
 
-      // Log to HCS
-      if (process.env.AGENT_TOPIC_ID) {
-        await hederaClient.submitMessage(process.env.AGENT_TOPIC_ID, JSON.stringify({
-          event: 'ReputationFeedbackSubmitted',
-          fromAgent,
-          toAgent,
-          rating,
-          paymentTxHash,
-          txHash: receipt.hash,
-          timestamp: new Date().toISOString()
-        }));
-      }
+      // HCS logging is mandatory - ensure topic exists
+      const agentTopicId = await hederaClient.ensureTopic('AGENT_TOPIC_ID', 'Agent', 'Agent registration events');
+      await hederaClient.submitMessage(agentTopicId, JSON.stringify({
+        event: 'ReputationFeedbackSubmitted',
+        fromAgent,
+        toAgent,
+        rating,
+        paymentTxHash,
+        txHash: receipt.hash,
+        timestamp: new Date().toISOString()
+      }));
 
       return {
         success: true,
@@ -117,17 +116,16 @@ class ReputationService {
       );
       const receipt = await tx.wait();
 
-      // Log to HCS
-      if (process.env.PAYMENT_TOPIC_ID) {
-        await hederaClient.submitMessage(process.env.PAYMENT_TOPIC_ID, JSON.stringify({
-          event: 'TrustEstablishedFromPayment',
-          agent1,
-          agent2,
-          transactionHash,
-          txHash: receipt.hash,
-          timestamp: new Date().toISOString()
-        }));
-      }
+      // HCS logging is mandatory - ensure topic exists
+      const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
+      await hederaClient.submitMessage(paymentTopicId, JSON.stringify({
+        event: 'TrustEstablishedFromPayment',
+        agent1,
+        agent2,
+        transactionHash,
+        txHash: receipt.hash,
+        timestamp: new Date().toISOString()
+      }));
 
       return {
         success: true,

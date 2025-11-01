@@ -6,7 +6,7 @@ const agentService = require('./agent-service');
 let AgentRegistryABI;
 let deploymentInfo;
 try {
-  AgentRegistryABI = require('../../contracts/artifacts/contracts/src/AgentRegistry.sol/AgentRegistry.json').abi;
+  AgentRegistryABI = require('../../contracts/artifacts/src/AgentRegistry.sol/AgentRegistry.json').abi;
   deploymentInfo = require('../../contracts/deployment.json');
 } catch (_e) {
   AgentRegistryABI = [];
@@ -20,14 +20,20 @@ class A2AService {
     this.agentRegistry = null;
   }
 
+  ensureProvider() {
+    if (this.provider) return;
+    const { RPC_URL } = process.env;
+    if (!RPC_URL) throw new Error('RPC_URL not set');
+    this.provider = new ethers.JsonRpcProvider(RPC_URL);
+  }
+
   ensureInitialized() {
     if (this.agentRegistry) return;
-    const { RPC_URL, EVM_PRIVATE_KEY } = process.env;
-    if (!RPC_URL) throw new Error('RPC_URL not set');
+    this.ensureProvider();
+    const { EVM_PRIVATE_KEY } = process.env;
     if (!EVM_PRIVATE_KEY || !EVM_PRIVATE_KEY.startsWith('0x')) {
-      throw new Error('EVM_PRIVATE_KEY must be set (hex 0x...) for A2A operations');
+      throw new Error('EVM_PRIVATE_KEY must be set (hex 0x...) for A2A operations (fallback)');
     }
-    this.provider = new ethers.JsonRpcProvider(RPC_URL);
     this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
     this.agentRegistry = new ethers.Contract(
       deploymentInfo.contracts.AgentRegistry,
@@ -37,10 +43,26 @@ class A2AService {
   }
 
   /**
-   * Initiate A2A communication between agents
+   * Get agent registry contract instance with specific wallet
    */
-  async initiateCommunication(fromAgent, toAgent, capability) {
-    this.ensureInitialized();
+  getAgentRegistryContract(wallet) {
+    this.ensureProvider();
+    return new ethers.Contract(
+      deploymentInfo.contracts.AgentRegistry,
+      AgentRegistryABI,
+      wallet
+    );
+  }
+
+  /**
+   * Initiate A2A communication between agents
+   * @param {string} fromAgent - Agent address initiating communication
+   * @param {string} toAgent - Target agent address
+   * @param {string} capability - Capability being requested
+   * @param {string} [fromAgentPrivateKey] - From agent's EVM private key (optional, DEMO ONLY)
+   * @returns {Promise<Object>} Communication initiation result
+   */
+  async initiateCommunication(fromAgent, toAgent, capability, fromAgentPrivateKey = null) {
     try {
       // Verify both agents exist and check trust thresholds
       const fromAgentData = await agentService.getAgent(fromAgent);
@@ -51,8 +73,32 @@ class A2AService {
         throw new Error('Target agent trust score too low for A2A communication (minimum 40)');
       }
 
+      // Determine which wallet/contract to use
+      let contractToUse = null;
+      
+      if (fromAgentPrivateKey) {
+        // Phase 1 (Demo): Use agent's wallet
+        this.ensureProvider();
+        let privateKey = fromAgentPrivateKey;
+        if (!privateKey.startsWith('0x')) {
+          privateKey = '0x' + privateKey;
+        }
+        const wallet = new ethers.Wallet(privateKey, this.provider);
+        
+        // Verify wallet address matches agent address
+        if (wallet.address.toLowerCase() !== fromAgent.toLowerCase()) {
+          throw new Error(`Private key does not match agent address. Expected ${fromAgent}, got ${wallet.address}`);
+        }
+        
+        contractToUse = this.getAgentRegistryContract(wallet);
+      } else {
+        // Fallback to backend wallet
+        this.ensureInitialized();
+        contractToUse = this.agentRegistry;
+      }
+
       // Initiate on-chain A2A interaction
-      const tx = await this.agentRegistry.initiateA2ACommunication(toAgent, capability);
+      const tx = await contractToUse.initiateA2ACommunication(toAgent, capability);
       const receipt = await tx.wait();
 
       // Extract interaction ID from event
@@ -60,30 +106,29 @@ class A2AService {
       try {
         const log = receipt.logs.find(l => {
           try {
-            return this.agentRegistry.interface.parseLog(l).name === 'A2AInteractionInitiated';
+            return contractToUse.interface.parseLog(l).name === 'A2AInteractionInitiated';
           } catch {
             return false;
           }
         });
         if (log) {
-          const parsed = this.agentRegistry.interface.parseLog(log);
+          const parsed = contractToUse.interface.parseLog(log);
           interactionId = parsed.args.interactionId;
         }
       } catch {}
 
-      // Submit to HCS for logging
-      if (process.env.A2A_TOPIC_ID) {
-        await hederaClient.submitMessage(process.env.A2A_TOPIC_ID, JSON.stringify({
-          event: 'A2ACommunicationInitiated',
-          interactionId,
-          fromAgent,
-          toAgent,
-          capability,
-          trustScoreFrom: fromAgentData.trustScore,
-          trustScoreTo: toAgentData.trustScore,
-          timestamp: new Date().toISOString()
-        }));
-      }
+      // HCS logging is mandatory - ensure topic exists
+      const a2aTopicId = await hederaClient.ensureTopic('A2A_TOPIC_ID', 'A2A', 'Agent-to-agent communication events');
+      await hederaClient.submitMessage(a2aTopicId, JSON.stringify({
+        event: 'A2ACommunicationInitiated',
+        interactionId,
+        fromAgent,
+        toAgent,
+        capability,
+        trustScoreFrom: fromAgentData.trustScore,
+        trustScoreTo: toAgentData.trustScore,
+        timestamp: new Date().toISOString()
+      }));
 
       return {
         success: true,
@@ -100,26 +145,55 @@ class A2AService {
 
   /**
    * Complete an A2A interaction (establishes trust)
+   * @param {string} interactionId - Interaction ID to complete
+   * @param {string} [completerAgentAddress] - Agent address completing (toAgent). If not provided, uses backend wallet.
+   * @param {string} [completerPrivateKey] - Completer's EVM private key (optional, DEMO ONLY)
+   * @returns {Promise<Object>} Completion result
    */
-  async completeInteraction(interactionId) {
-    this.ensureInitialized();
+  async completeInteraction(interactionId, completerAgentAddress = null, completerPrivateKey = null) {
     try {
-      const tx = await this.agentRegistry.completeA2AInteraction(interactionId);
+      // Get interaction details first to verify completer
+      this.ensureInitialized();
+      const interaction = await this.agentRegistry.getA2AInteraction(interactionId);
+      
+      // Determine which wallet/contract to use
+      let contractToUse = null;
+      
+      if (completerAgentAddress && completerPrivateKey) {
+        // Verify completer is the toAgent
+        if (completerAgentAddress.toLowerCase() !== interaction.toAgent.toLowerCase()) {
+          throw new Error(`Only ${interaction.toAgent} can complete this interaction. Got ${completerAgentAddress}`);
+        }
+        
+        this.ensureProvider();
+        let privateKey = completerPrivateKey;
+        if (!privateKey.startsWith('0x')) {
+          privateKey = '0x' + privateKey;
+        }
+        const wallet = new ethers.Wallet(privateKey, this.provider);
+        
+        if (wallet.address.toLowerCase() !== completerAgentAddress.toLowerCase()) {
+          throw new Error(`Private key does not match agent address. Expected ${completerAgentAddress}, got ${wallet.address}`);
+        }
+        
+        contractToUse = this.getAgentRegistryContract(wallet);
+      } else {
+        // Fallback to backend wallet
+        contractToUse = this.agentRegistry;
+      }
+      
+      const tx = await contractToUse.completeA2AInteraction(interactionId);
       const receipt = await tx.wait();
 
-      // Get interaction details
-      const interaction = await this.agentRegistry.getA2AInteraction(interactionId);
-
-      // Log to HCS
-      if (process.env.A2A_TOPIC_ID) {
-        await hederaClient.submitMessage(process.env.A2A_TOPIC_ID, JSON.stringify({
-          event: 'A2ACommunicationCompleted',
-          interactionId,
-          fromAgent: interaction.fromAgent,
-          toAgent: interaction.toAgent,
-          timestamp: new Date().toISOString()
-        }));
-      }
+      // HCS logging is mandatory - ensure topic exists
+      const a2aTopicId = await hederaClient.ensureTopic('A2A_TOPIC_ID', 'A2A', 'Agent-to-agent communication events');
+      await hederaClient.submitMessage(a2aTopicId, JSON.stringify({
+        event: 'A2ACommunicationCompleted',
+        interactionId,
+        fromAgent: interaction.fromAgent,
+        toAgent: interaction.toAgent,
+        timestamp: new Date().toISOString()
+      }));
 
       return {
         success: true,

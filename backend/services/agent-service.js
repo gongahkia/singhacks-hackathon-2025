@@ -3,14 +3,15 @@ const { ethers } = require('ethers');
 const hederaClient = require('./hedera-client');
 
 // Note: assumes artifacts exist under contracts/artifacts
-let AgentRegistryABI = null;
-let deploymentInfo = null;
-let agentRegistryAddressFromEnv = process.env.AGENT_REGISTRY_ADDRESS;
+let AgentRegistryABI;
+let deploymentInfo;
 try {
-  AgentRegistryABI = require('../../contracts/artifacts/contracts/src/AgentRegistry.sol/AgentRegistry.json').abi;
+  AgentRegistryABI = require('../../contracts/artifacts/src/AgentRegistry.sol/AgentRegistry.json').abi;
   deploymentInfo = require('../../contracts/deployment.json');
 } catch (_e) {
-  // Artifacts may not exist in dev; defer validation to runtime
+  // Fallback stubs if artifacts not present at dev time
+  AgentRegistryABI = [];
+  deploymentInfo = { contracts: { AgentRegistry: process.env.AGENT_REGISTRY_ADDRESS || '0x0000000000000000000000000000000000000000' } };
 }
 
 class AgentService {
@@ -29,8 +30,8 @@ class AgentService {
     }
     this.provider = new ethers.JsonRpcProvider(RPC_URL);
     this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
-    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.AgentRegistry) || agentRegistryAddressFromEnv;
-    if (!address) {
+    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.AgentRegistry) || process.env.AGENT_REGISTRY_ADDRESS;
+    if (!address || address === '0x0000000000000000000000000000000000000000') {
       throw new Error('AgentRegistry address not configured. Provide contracts artifacts or set AGENT_REGISTRY_ADDRESS');
     }
     if (!AgentRegistryABI || AgentRegistryABI.length === 0) {
@@ -44,15 +45,15 @@ class AgentService {
     const tx = await this.agentRegistry.registerAgent(name, capabilities, metadata);
     const receipt = await tx.wait();
 
-    if (process.env.AGENT_TOPIC_ID) {
-      await hederaClient.submitMessage(process.env.AGENT_TOPIC_ID, JSON.stringify({
-        event: 'AgentRegistered',
-        agent: this.wallet.address,
-        name,
-        capabilities,
-        timestamp: new Date().toISOString()
-      }));
-    }
+    // HCS logging is mandatory - ensure topic exists
+    const agentTopicId = await hederaClient.ensureTopic('AGENT_TOPIC_ID', 'Agent', 'Agent registration events');
+    await hederaClient.submitMessage(agentTopicId, JSON.stringify({
+      event: 'AgentRegistered',
+      agent: this.wallet.address,
+      name,
+      capabilities,
+      timestamp: new Date().toISOString()
+    }));
     return { success: true, txHash: receipt.hash, agentAddress: this.wallet.address };
   }
 
