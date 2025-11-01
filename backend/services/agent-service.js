@@ -3,19 +3,14 @@ const { ethers } = require('ethers');
 const hederaClient = require('./hedera-client');
 
 // Note: assumes artifacts exist under contracts/artifacts
-let AgentRegistryABI;
-let deploymentInfo;
+let AgentRegistryABI = null;
+let deploymentInfo = null;
+let agentRegistryAddressFromEnv = process.env.AGENT_REGISTRY_ADDRESS;
 try {
   AgentRegistryABI = require('../../contracts/artifacts/contracts/src/AgentRegistry.sol/AgentRegistry.json').abi;
   deploymentInfo = require('../../contracts/deployment.json');
 } catch (_e) {
-  // Fallback to env address if artifacts not present
-  const addr = process.env.AGENT_REGISTRY_ADDRESS;
-  if (!addr) {
-    throw new Error('AgentRegistry artifact not found and AGENT_REGISTRY_ADDRESS is not set');
-  }
-  AgentRegistryABI = []; // Minimal; methods will still revert if called without ABI
-  deploymentInfo = { contracts: { AgentRegistry: addr } };
+  // Artifacts may not exist in dev; defer validation to runtime
 }
 
 class AgentService {
@@ -34,8 +29,13 @@ class AgentService {
     }
     this.provider = new ethers.JsonRpcProvider(RPC_URL);
     this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
-    const address = deploymentInfo?.contracts?.AgentRegistry;
-    if (!address) throw new Error('AgentRegistry address not configured');
+    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.AgentRegistry) || agentRegistryAddressFromEnv;
+    if (!address) {
+      throw new Error('AgentRegistry address not configured. Provide contracts artifacts or set AGENT_REGISTRY_ADDRESS');
+    }
+    if (!AgentRegistryABI || AgentRegistryABI.length === 0) {
+      throw new Error('AgentRegistry ABI not found. Ensure artifacts are built at contracts/artifacts');
+    }
     this.agentRegistry = new ethers.Contract(address, AgentRegistryABI, this.wallet);
   }
 

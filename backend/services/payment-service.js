@@ -2,18 +2,14 @@
 const { ethers } = require('ethers');
 const hederaClient = require('./hedera-client');
 
-let PaymentProcessorABI;
-let deploymentInfo;
+let PaymentProcessorABI = null;
+let deploymentInfo = null;
+let paymentProcessorAddressFromEnv = process.env.PAYMENT_PROCESSOR_ADDRESS;
 try {
   PaymentProcessorABI = require('../../contracts/artifacts/contracts/src/PaymentProcessor.sol/PaymentProcessor.json').abi;
   deploymentInfo = require('../../contracts/deployment.json');
 } catch (_e) {
-  const addr = process.env.PAYMENT_PROCESSOR_ADDRESS;
-  if (!addr) {
-    throw new Error('PaymentProcessor artifact not found and PAYMENT_PROCESSOR_ADDRESS is not set');
-  }
-  PaymentProcessorABI = [];
-  deploymentInfo = { contracts: { PaymentProcessor: addr } };
+  // Artifacts may not exist in dev; defer validation to runtime
 }
 
 class PaymentService {
@@ -32,8 +28,13 @@ class PaymentService {
     }
     this.provider = new ethers.JsonRpcProvider(RPC_URL);
     this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
-    const address = deploymentInfo?.contracts?.PaymentProcessor;
-    if (!address) throw new Error('PaymentProcessor address not configured');
+    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || paymentProcessorAddressFromEnv;
+    if (!address) {
+      throw new Error('PaymentProcessor address not configured. Provide contracts artifacts or set PAYMENT_PROCESSOR_ADDRESS');
+    }
+    if (!PaymentProcessorABI || PaymentProcessorABI.length === 0) {
+      throw new Error('PaymentProcessor ABI not found. Ensure artifacts are built at contracts/artifacts');
+    }
     this.paymentProcessor = new ethers.Contract(address, PaymentProcessorABI, this.wallet);
   }
 
