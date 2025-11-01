@@ -1,22 +1,53 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { mockAgents } from "@/lib/mock-agents"
 import { Badge } from "@/components/ui/badge"
 import { Star, Download, Shield } from "lucide-react"
+
+interface Agent {
+  name: string
+  address: string
+  capabilities: string[]
+  metadata: string
+  trustScore: string
+  registeredAt: string
+  isActive: boolean
+}
 
 export default function MarketplacePage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const categories = ["All", "Finance", "Trading", "Security", "DeFi", "NFT", "Governance", "Utility", "Infrastructure", "Analytics"]
 
-  const filteredAgents = mockAgents.filter(agent => {
+  useEffect(() => {
+    fetchAgents()
+  }, [])
+
+  const fetchAgents = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const res = await fetch(`${BASE_URL}/api/agents`)
+      if (!res.ok) throw new Error('Failed to fetch agents from backend')
+      const data = await res.json()
+      setAgents(data.agents || [])
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredAgents = agents.filter(agent => {
     const matchesSearch = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         agent.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         agent.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-    const matchesCategory = selectedCategory === "All" || agent.category === selectedCategory
+                         agent.capabilities.some(cap => cap.toLowerCase().includes(searchQuery.toLowerCase()))
+    const matchesCategory = selectedCategory === "All" || agent.capabilities.includes(selectedCategory.toLowerCase())
     return matchesSearch && matchesCategory
   })
 
