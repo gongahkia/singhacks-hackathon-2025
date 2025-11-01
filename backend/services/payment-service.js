@@ -61,20 +61,16 @@ class PaymentService {
   }
 
   async releaseEscrow(escrowId) {
-<<<<<<< HEAD
     this.ensureContract();
-    const tx = await this.paymentProcessor.releaseEscrow(escrowId);
-=======
     // Get escrow details before release to establish trust
     const escrow = await this.getEscrow(escrowId);
-    
+
     // Convert escrowId to bytes32 format if it's a string
-    const escrowIdBytes = ethers.isHexString(escrowId) 
-      ? escrowId 
+    const escrowIdBytes = ethers.isHexString(escrowId)
+      ? escrowId
       : ethers.id(escrowId);
-    
+
     const tx = await this.paymentProcessor.releaseEscrow(escrowIdBytes);
->>>>>>> origin/main
     const receipt = await tx.wait();
     
     // Establish trust from successful payment (ERC-8004)
@@ -103,31 +99,23 @@ class PaymentService {
   }
 
   async refundEscrow(escrowId) {
-<<<<<<< HEAD
     this.ensureContract();
-    const tx = await this.paymentProcessor.refundEscrow(escrowId);
-=======
     // Convert escrowId to bytes32 format if needed
-    const escrowIdBytes = ethers.isHexString(escrowId) 
-      ? escrowId 
+    const escrowIdBytes = ethers.isHexString(escrowId)
+      ? escrowId
       : ethers.id(escrowId);
     const tx = await this.paymentProcessor.refundEscrow(escrowIdBytes);
->>>>>>> origin/main
     const receipt = await tx.wait();
     return { success: true, txHash: receipt.hash };
   }
 
   async getEscrow(escrowId) {
-<<<<<<< HEAD
     this.ensureContract();
-    const e = await this.paymentProcessor.getEscrow(escrowId);
-=======
     // Convert escrowId to bytes32 format if needed
-    const escrowIdBytes = ethers.isHexString(escrowId) 
-      ? escrowId 
+    const escrowIdBytes = ethers.isHexString(escrowId)
+      ? escrowId
       : ethers.id(escrowId);
     const e = await this.paymentProcessor.getEscrow(escrowIdBytes);
->>>>>>> origin/main
     return {
       escrowId,
       payer: e.payer,
