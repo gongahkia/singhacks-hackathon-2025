@@ -40,6 +40,9 @@ export default function App() {
             <Link href="/marketplace" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
               Agent Marketplace
             </Link>
+            <Link href="/chat" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
+              Chat
+            </Link>
             <Link href="/settings" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
               Settings
             </Link>
