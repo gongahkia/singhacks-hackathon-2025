@@ -19,4 +19,18 @@ export const apiClient = {
     if (!res.ok) throw new Error('Failed to fetch agents')
     return res.json()
   },
+  async verifySignature(params: { accountId?: string; evmAddress?: string; message: any; signature: string }) {
+    const res = await fetch(url('/api/auth/verify-signature'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    })
+    // Return JSON even on 400 to show backend error details to user
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const msg = (data && (data.error || data.message)) || 'Verification failed'
+      throw new Error(msg)
+    }
+    return data
+  }
 }
