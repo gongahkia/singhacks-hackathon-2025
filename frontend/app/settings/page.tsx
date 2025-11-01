@@ -85,7 +85,10 @@ export default function SettingsPage() {
       {/* Top navigation bar */}
       <nav className="border-b border-border px-12 py-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Hedera Agent Economy</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🍑</span>
+            <h2 className="text-xl font-semibold">Heracles</h2>
+          </div>
           <div className="flex gap-3">
             <Link
               href="/"
