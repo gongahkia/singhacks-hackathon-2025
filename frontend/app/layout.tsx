@@ -7,7 +7,7 @@ import "./globals.css"
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Web3 Payment",
+  title: "Heracles",
   description: "Minimal Web3 payment interface",
   generator: "v0.app",
 }

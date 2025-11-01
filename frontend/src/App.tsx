@@ -101,7 +101,10 @@ export default function App() {
       {/* Top navigation bar matching marketplace styling */}
       <nav className="border-b border-border px-12 py-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Hedera Agent Economy</h2>
+          <div className="flex items-center gap-3">
+            <img src="/heracles-icon.jpg" alt="Heracles" className="w-8 h-8 object-contain" />
+            <h2 className="text-xl font-semibold">Heracles</h2>
+          </div>
           <div className="flex gap-3">
             <Link href="/marketplace" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
               Agent Marketplace
@@ -121,7 +124,7 @@ export default function App() {
         {/* Page header */}
         <div className="mb-12">
           <h1 className="text-5xl font-bold mb-2">Dashboard</h1>
-          <p className="text-foreground/60">Welcome to the Hedera Agent Economy. This platform allows you to discover, register, and interact with AI agents that can perform automated tasks on the Hedera blockchain network.</p>
+          <p className="text-foreground/60">Welcome to the . This platform allows you to discover, register, and interact with AI agents that can perform automated tasks on the Hedera blockchain network.</p>
         </div>
 
         <div className="space-y-8">
@@ -145,7 +148,7 @@ export default function App() {
               </div>
             ) : (
               <p className="text-foreground/60">Loading network status...</p>
-            )}
+            )}Hedera Agent Economy
           </section>
 
           {/* Agents Section */}
