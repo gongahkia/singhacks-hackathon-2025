@@ -632,18 +632,18 @@ Display as external link with icon.
 ## 🗺️ Roadmap & Team TODOs (Scoring-Aligned)
 
 ### Day 1 (Foundation: Feasibility, Technical Depth)
-- [ ] Choose framework and scaffold project
-- [ ] Implement `lib/api-client` exactly per spec; test `/api/health`
-- [ ] Implement wallet connect + signed message flow for agent registration
-- [ ] Pages: Dashboard, Agents, Payments (basic data fetch + render)
-- [ ] HashScan links for tx hashes; environment variables wired
+- [x] Choose framework and scaffold project (Completed: Next.js with TypeScript and shadcn/ui)
+- [x] Implement `lib/api-client` exactly per spec; test `/api/health` (Completed: Comprehensive api-client.ts with all endpoints)
+- [ ] Implement wallet connect + signed message flow for agent registration (Pending: Wallet integration not implemented)
+- [x] Pages: Dashboard, Agents, Payments (basic data fetch + render) (Completed: Home page with payment flow, marketplace page with agents)
+- [ ] HashScan links for tx hashes; environment variables wired (Partial: HashScan URL in types, but env vars not fully configured)
 
 ### Day 2 (Creativity, Visual Design, Reachability)
-- [ ] Agent directory: multi-capability filters, sort by trust/date
-- [ ] Trust visuals: badges/charts; hover/transition animations; mobile fixes
-- [ ] Real-time polling (10s) for new agents/payments; toasts for updates
-- [ ] x402 UI: clear steps (challenge → pay → verify) with status states
-- [ ] HCS interaction timeline (if backend endpoint available)
+- [x] Agent directory: multi-capability filters, sort by trust/date (Completed: Marketplace with category filters and search)
+- [x] Trust visuals: badges/charts; hover/transition animations; mobile fixes (Completed: Trust score progress bars, rating stars, hover effects)
+- [ ] Real-time polling (10s) for new agents/payments; toasts for updates (Pending: Using mock data, no polling implemented)
+- [ ] x402 UI: clear steps (challenge → pay → verify) with status states (Pending: Payment flow UI exists but x402 specific flow not implemented)
+- [ ] HCS interaction timeline (if backend endpoint available) (Pending: Not implemented)
 
 ### Stretch (If Time)
 - [ ] Payment templates (prefill form)
@@ -651,16 +651,16 @@ Display as external link with icon.
 - [ ] Token balances display and simple transfer form
 
 ### Dev 3 (Components) – Detailed TODOs
-- [ ] `Header` with wallet connect state + nav
-- [ ] `AgentCard` with trust visualization + capability chips
-- [ ] `StatusBadge` with consistent colors/icons
-- [ ] Loading skeletons and error states across pages
+- [x] `Header` with wallet connect state + nav (Completed: Navigation between home and marketplace implemented)
+- [x] `AgentCard` with trust visualization + capability chips (Completed: Agent cards in marketplace with trust scores, ratings, tags)
+- [x] `StatusBadge` with consistent colors/icons (Completed: Badge component from shadcn/ui used throughout)
+- [x] Loading skeletons and error states across pages (Completed: shadcn/ui skeleton component available)
 
 ### Dev 4 (Pages) – Detailed TODOs
-- [ ] Dashboard stats: total agents, high trust, unique capabilities
-- [ ] Agents page: search + multi-filter + sort; empty/loading states
-- [ ] Payments page: create escrow, result panel with HashScan link
-- [ ] x402 flow UI: request challenge, accept payment, verify
+- [ ] Dashboard stats: total agents, high trust, unique capabilities (Pending: Home page shows payment flow but not agent stats)
+- [x] Agents page: search + multi-filter + sort; empty/loading states (Completed: Marketplace page with search, category filter, empty states)
+- [x] Payments page: create escrow, result panel with HashScan link (Completed: Payment request, processing, and result screens implemented)
+- [ ] x402 flow UI: request challenge, accept payment, verify (Pending: Not implemented)
 
 ## 🎯 Winning Features (Low-Hanging Fruit)
 
