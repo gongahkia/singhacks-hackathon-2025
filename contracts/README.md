@@ -66,9 +66,13 @@ npx hardhat run deploy/deploy.js --network hedera_testnet
 
 **Key Features:**
 - Register agents with capabilities
+- **ERC-8004 Trust Score Generation**: Automatic calculation based on metadata and capabilities (50-65 initial score)
 - Search agents by capability
 - Update agent capabilities
-- Trust score management (owner-only)
+- **ERC-8004 Reputation Registry**: Submit and retrieve feedback with proof-of-payment linking
+- **A2A Communication**: Initiate and complete agent-to-agent interactions with trust establishment
+- **Trust Establishment**: Automatic trust boosts from successful payments and interactions
+- Trust score management (owner-only for manual overrides)
 - On-chain agent discovery
 
 **Main Functions:**
@@ -78,6 +82,13 @@ function getAgent(address agentAddress) returns (Agent)
 function searchByCapability(string capability) returns (address[])
 function updateCapabilities(string[] newCapabilities)
 function updateTrustScore(address agent, uint256 score) onlyOwner
+function submitFeedback(address toAgent, uint256 rating, string comment, bytes32 paymentTxHash)
+function getAgentReputation(address agentAddress) returns (ReputationFeedback[])
+function initiateA2ACommunication(address toAgent, string capability) returns (bytes32)
+function completeA2AInteraction(bytes32 interactionId)
+function establishTrustFromPayment(address agent1, address agent2, bytes32 transactionHash)
+function getA2AInteraction(bytes32 interactionId) returns (A2AInteraction)
+function getAgentInteractions(address agentAddress) returns (bytes32[])
 ```
 
 **Events:**
@@ -85,6 +96,10 @@ function updateTrustScore(address agent, uint256 score) onlyOwner
 event AgentRegistered(address indexed agentAddress, string name, string[] capabilities)
 event AgentUpdated(address indexed agentAddress, string[] newCapabilities)
 event TrustScoreUpdated(address indexed agentAddress, uint256 newScore)
+event ReputationFeedbackSubmitted(address indexed fromAgent, address indexed toAgent, uint256 rating)
+event A2AInteractionInitiated(bytes32 indexed interactionId, address indexed fromAgent, address indexed toAgent, string capability)
+event A2AInteractionCompleted(bytes32 indexed interactionId, address indexed fromAgent, address indexed toAgent)
+event TrustEstablished(address indexed agent1, address indexed agent2, bytes32 indexed transactionHash)
 ```
 
 ### PaymentProcessor.sol
@@ -100,7 +115,7 @@ event TrustScoreUpdated(address indexed agentAddress, uint256 newScore)
 
 **Main Functions:**
 ```solidity
-function createEscrow(address payee, string description) payable returns (bytes32)
+function createEscrow(address payee, string description, uint256 expirationDays) payable returns (bytes32)
 function releaseEscrow(bytes32 escrowId)
 function refundEscrow(bytes32 escrowId)
 function getEscrow(bytes32 escrowId) returns (Escrow)
@@ -108,9 +123,10 @@ function getEscrow(bytes32 escrowId) returns (Escrow)
 
 **Events:**
 ```solidity
-event EscrowCreated(bytes32 indexed escrowId, address payer, address payee, uint256 amount, string description)
+event EscrowCreated(bytes32 indexed escrowId, address payer, address payee, uint256 amount, string description, uint256 expirationTime)
 event EscrowCompleted(bytes32 indexed escrowId, uint256 amount)
 event EscrowRefunded(bytes32 indexed escrowId, uint256 amount)
+event TrustEstablishmentTriggered(bytes32 indexed escrowId, address indexed payer, address indexed payee)
 ```
 
 ## 🧪 Testing
