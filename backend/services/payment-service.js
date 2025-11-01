@@ -46,22 +46,58 @@ class PaymentService {
   }
 
   async releaseEscrow(escrowId) {
-    const tx = await this.paymentProcessor.releaseEscrow(escrowId);
+    // Get escrow details before release to establish trust
+    const escrow = await this.getEscrow(escrowId);
+    
+    // Convert escrowId to bytes32 format if it's a string
+    const escrowIdBytes = ethers.isHexString(escrowId) 
+      ? escrowId 
+      : ethers.id(escrowId);
+    
+    const tx = await this.paymentProcessor.releaseEscrow(escrowIdBytes);
     const receipt = await tx.wait();
+    
+    // Establish trust from successful payment (ERC-8004)
+    try {
+      const reputationService = require('./reputation-service');
+      const txHash = receipt.hash;
+      await reputationService.establishTrustFromPayment(
+        escrow.payer,
+        escrow.payee,
+        txHash
+      );
+    } catch (error) {
+      console.warn('Failed to establish trust from payment:', error.message);
+    }
+    
     if (process.env.PAYMENT_TOPIC_ID) {
-      await hederaClient.submitMessage(process.env.PAYMENT_TOPIC_ID, JSON.stringify({ event: 'EscrowReleased', escrowId, timestamp: new Date().toISOString() }));
+      await hederaClient.submitMessage(process.env.PAYMENT_TOPIC_ID, JSON.stringify({ 
+        event: 'EscrowReleased', 
+        escrowId, 
+        payer: escrow.payer,
+        payee: escrow.payee,
+        timestamp: new Date().toISOString() 
+      }));
     }
     return { success: true, txHash: receipt.hash };
   }
 
   async refundEscrow(escrowId) {
-    const tx = await this.paymentProcessor.refundEscrow(escrowId);
+    // Convert escrowId to bytes32 format if needed
+    const escrowIdBytes = ethers.isHexString(escrowId) 
+      ? escrowId 
+      : ethers.id(escrowId);
+    const tx = await this.paymentProcessor.refundEscrow(escrowIdBytes);
     const receipt = await tx.wait();
     return { success: true, txHash: receipt.hash };
   }
 
   async getEscrow(escrowId) {
-    const e = await this.paymentProcessor.getEscrow(escrowId);
+    // Convert escrowId to bytes32 format if needed
+    const escrowIdBytes = ethers.isHexString(escrowId) 
+      ? escrowId 
+      : ethers.id(escrowId);
+    const e = await this.paymentProcessor.getEscrow(escrowIdBytes);
     return {
       escrowId,
       payer: e.payer,

@@ -75,6 +75,12 @@ contract PaymentProcessor is ReentrancyGuard, Pausable, Ownable {
         address refundedTo
     );
     
+    event TrustEstablishmentTriggered(
+        bytes32 indexed escrowId,
+        address indexed payer,
+        address indexed payee
+    );
+    
     constructor(address initialOwner) Ownable(initialOwner) {}
     
     /**
@@ -174,6 +180,7 @@ contract PaymentProcessor is ReentrancyGuard, Pausable, Ownable {
         require(success, "Transfer failed");
         
         emit EscrowCompleted(_escrowId, amount);
+        emit TrustEstablishmentTriggered(_escrowId, escrow.payer, escrow.payee);
     }
     
     /**
