@@ -53,4 +53,20 @@ router.put('/capabilities', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Get agent reputation
+router.get('/:address/reputation', async (req, res, next) => {
+  try {
+    const reputation = await agentService.getAgentReputation(req.params.address);
+    res.json({ reputation, count: reputation.length });
+  } catch (e) { next(e); }
+});
+
+// Get agent interactions
+router.get('/:address/interactions', async (req, res, next) => {
+  try {
+    const interactions = await agentService.getAgentInteractions(req.params.address);
+    res.json({ interactions, count: interactions.length });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

@@ -70,6 +70,16 @@ class AgentService {
     const receipt = await tx.wait();
     return { success: true, txHash: receipt.hash };
   }
+
+  async getAgentReputation(agentAddress) {
+    const reputationService = require('./reputation-service');
+    return await reputationService.getAgentReputation(agentAddress);
+  }
+
+  async getAgentInteractions(agentAddress) {
+    const a2aService = require('./a2a-service');
+    return await a2aService.getAgentInteractions(agentAddress);
+  }
 }
 
 module.exports = new AgentService();

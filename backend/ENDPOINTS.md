@@ -41,6 +41,14 @@ Note: All endpoints are prefixed with `/api`.
   - Updates capabilities of the connected agent (wallet in backend env).
   - Response: `{ success: true, txHash: string }`
 
+- GET `/api/agents/:address/reputation`
+  - Returns reputation feedback for an agent (ERC-8004 Reputation Registry).
+  - Response: `{ reputation: ReputationFeedback[], count: number }`
+
+- GET `/api/agents/:address/interactions`
+  - Returns A2A interaction history for an agent.
+  - Response: `{ interactions: A2AInteraction[], count: number }`
+
 Agent object shape (typical):
 ```json
 {
@@ -139,11 +147,50 @@ Agent object shape (typical):
   - Retrieves topic messages from Mirror Node.
   - Response: Mirror Node payload.
 
+## A2A Communication (ERC-8004)
+
+- POST `/api/a2a/communicate`
+  - Body: `{ fromAgent: string, toAgent: string, capability: string }`
+  - Initiates A2A communication (requires target agent trust score ≥ 40).
+  - Response: `{ success: true, interactionId: string, txHash: string, fromAgent: string, toAgent: string, capability: string }`
+
+- POST `/api/a2a/interactions/:interactionId/complete`
+  - Completes an A2A interaction, establishing trust (+1 trust boost for both agents).
+  - Response: `{ success: true, txHash: string, interactionId: string }`
+
+- GET `/api/a2a/interactions/:interactionId`
+  - Returns details of an A2A interaction.
+  - Response: `{ interactionId: string, fromAgent: string, toAgent: string, capability: string, timestamp: string, completed: boolean }`
+
+- GET `/api/a2a/agents/:address/interactions`
+  - Returns A2A interaction history for an agent.
+  - Response: `{ interactions: A2AInteraction[], count: number }`
+
+## Reputation (ERC-8004 Reputation Registry)
+
+- POST `/api/reputation/feedback`
+  - Body: `{ fromAgent: string, toAgent: string, rating: number (1-5), comment?: string, paymentTxHash?: string }`
+  - Submits reputation feedback with optional proof-of-payment linking.
+  - Automatically updates target agent's trust score based on average rating.
+  - Response: `{ success: true, txHash: string, fromAgent: string, toAgent: string, rating: number }`
+
+- GET `/api/reputation/agents/:address/reputation`
+  - Returns all reputation feedback for an agent.
+  - Response: `{ reputation: ReputationFeedback[], count: number }`
+
+- POST `/api/reputation/trust/payment`
+  - Body: `{ agent1: string, agent2: string, transactionHash: string }`
+  - Establishes trust from successful payment (+2 trust boost for both agents).
+  - Called automatically when escrow is released via `/api/payments/:escrowId/release`.
+  - Response: `{ success: true, txHash: string, agent1: string, agent2: string }`
+
 ## Notes
 
-- Env variables expected: `HEDERA_NETWORK`, `HEDERA_ACCOUNT_ID`, `HEDERA_PRIVATE_KEY`, `MIRROR_NODE_URL`, `RPC_URL`, `EVM_PRIVATE_KEY`, `AGENT_TOPIC_ID?`, `PAYMENT_TOPIC_ID?`, or `AGENT_REGISTRY_ADDRESS`/`PAYMENT_PROCESSOR_ADDRESS` when artifacts are absent.
+- Env variables expected: `HEDERA_NETWORK`, `HEDERA_ACCOUNT_ID`, `HEDERA_PRIVATE_KEY`, `MIRROR_NODE_URL`, `RPC_URL`, `EVM_PRIVATE_KEY`, `AGENT_TOPIC_ID?`, `PAYMENT_TOPIC_ID?`, `A2A_TOPIC_ID?`, or `AGENT_REGISTRY_ADDRESS`/`PAYMENT_PROCESSOR_ADDRESS` when artifacts are absent.
 - Amounts are expected in HBAR units (string/number) for payment endpoints; HTS transfer uses integer token amounts.
 - Errors return JSON `{ error: string }` with appropriate HTTP status codes.
+- **Trust Score Generation**: Automatically calculated at registration (50-65 based on metadata completeness and number of capabilities).
+- **Trust Boosts**: Automatic increases from successful A2A interactions (+1 each) and successful payments (+2 each).
 
 ---
 
@@ -236,4 +283,33 @@ curl -s -X POST $BASE/api/tokens/transfer \
 curl -s -X POST $BASE/api/auth/verify-signature \
   -H "Content-Type: application/json" \
   -d '{"evmAddress":"0xSigner","message":{"action":"registerAgent","timestamp":"2025-11-01T00:00:00Z"},"signature":"0x..."}' | jq
+
+# 8) A2A Communication (ERC-8004)
+# 8a) Initiate A2A communication
+curl -s -X POST $BASE/api/a2a/communicate \
+  -H "Content-Type: application/json" \
+  -d '{"fromAgent":"0xFrom","toAgent":"0xTo","capability":"smart-contracts"}' | jq
+
+# 8b) Complete A2A interaction
+curl -s -X POST $BASE/api/a2a/interactions/0xInteractionId/complete | jq
+
+# 8c) Get interaction details
+curl -s $BASE/api/a2a/interactions/0xInteractionId | jq
+
+# 8d) Get agent interactions
+curl -s $BASE/api/a2a/agents/0xAgentAddress/interactions | jq
+
+# 9) Reputation (ERC-8004 Reputation Registry)
+# 9a) Submit feedback
+curl -s -X POST $BASE/api/reputation/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"fromAgent":"0xFrom","toAgent":"0xTo","rating":5,"comment":"Excellent service","paymentTxHash":"0x..."}' | jq
+
+# 9b) Get agent reputation
+curl -s $BASE/api/reputation/agents/0xAgentAddress/reputation | jq
+
+# 9c) Establish trust from payment
+curl -s -X POST $BASE/api/reputation/trust/payment \
+  -H "Content-Type: application/json" \
+  -d '{"agent1":"0xAgent1","agent2":"0xAgent2","transactionHash":"0x..."}' | jq
 ```
