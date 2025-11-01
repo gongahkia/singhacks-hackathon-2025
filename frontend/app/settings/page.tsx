@@ -27,6 +27,9 @@ export default function SettingsPage() {
   const [geminiKey, setGeminiKey] = useState('')
   const [geminiUrl, setGeminiUrl] = useState('')
   const [settingsSaveMsg, setSettingsSaveMsg] = useState<string | null>(null)
+  // Registered agent for chat
+  const [registeredAgentName, setRegisteredAgentName] = useState('')
+  const [agentSavedMsg, setAgentSavedMsg] = useState<string | null>(null)
 
   useEffect(() => {
     // Load current masked Gemini API settings on mount
@@ -44,6 +47,12 @@ export default function SettingsPage() {
         setGeminiUrl(apiUrl)
       }
     }).catch(() => {})
+
+    // Load registered agent from localStorage (used by Chat)
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('heracles.registeredAgentName') : null
+      if (stored) setRegisteredAgentName(stored)
+    } catch {}
   }, [])
 
   const onConnect = async () => {
@@ -205,6 +214,42 @@ export default function SettingsPage() {
                 </pre>
               </div>
             )}
+          </section>
+
+          {/* Registered Agent for Chat */}
+          <section className="border border-border p-8 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Registered Agent (for Chat)</h2>
+              <p className="text-sm text-foreground/60">This name is used by the Agent Chat when initializing your session.</p>
+            </div>
+            <div className="max-w-xl flex items-center gap-3">
+              <input
+                className="flex-1 px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g., Alice Tan"
+                value={registeredAgentName}
+                onChange={(e) => setRegisteredAgentName(e.target.value)}
+              />
+              <button
+                className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => {
+                  try {
+                    const v = (registeredAgentName || '').trim()
+                    if (typeof window !== 'undefined') {
+                      window.localStorage.setItem('heracles.registeredAgentName', v)
+                      window.dispatchEvent(new CustomEvent('heracles:agentNameChanged', { detail: { name: v } }))
+                    }
+                    setAgentSavedMsg('Registered agent saved')
+                    setTimeout(() => setAgentSavedMsg(null), 1500)
+                  } catch (e: any) {
+                    setAgentSavedMsg('Save failed')
+                    setTimeout(() => setAgentSavedMsg(null), 2000)
+                  }
+                }}
+              >
+                Save
+              </button>
+            </div>
+            {agentSavedMsg && <div className="text-sm text-foreground/70">{agentSavedMsg}</div>}
           </section>
 
           {/* Gemini API Key Section */}

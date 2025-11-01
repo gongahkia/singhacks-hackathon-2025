@@ -1,17 +1,29 @@
 "use client"
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Send } from 'lucide-react'
+import { Send, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { addAgentTransaction } from '@/lib/tx-store'
 import PaymentRequest from '@/components/payment-request'
+import ProgressSidebar, { type ProgressItem } from '@/components/progress-sidebar'
 
-type MessageRole = 'user' | 'assistant' | 'event'
+type MessageRole = 'user' | 'assistant' | 'event' | 'connector'
+
+type EventStatus = 'pending' | 'done' | 'error'
 
 interface Message {
   id: string
   role: MessageRole
   content: string
   timestamp: Date
+  event?: {
+    type: Breakpoint['type'] | string
+    status: EventStatus
+    data?: any
+  }
+  connector?: {
+    durationMs: number
+  }
 }
 
 type Breakpoint =
@@ -19,9 +31,12 @@ type Breakpoint =
   | { type: 'sellers_found'; text: string; count: number }
   | { type: 'sellers_ranked'; text: string }
   | { type: 'seller_confirmed'; text: string; seller?: { name: string; accountId?: string } }
+  | { type: 'seller_verifying_ecr8004'; text: string }
   | { type: 'seller_verified_ecr8004'; text: string }
   | { type: 'transaction_details_confirmed'; text: string; quantity?: number; amount?: number }
   | { type: 'transaction_ready'; text: string }
+  | { type: 'agent_session_initializing'; text: string }
+  | { type: 'agent_session_loaded'; text: string }
   | { type: string; [key: string]: any }
 
 export default function ChatPage() {
@@ -41,42 +56,115 @@ export default function ChatPage() {
   const [paymentProcessing, setPaymentProcessing] = useState(false)
   const [paymentConfirmed, setPaymentConfirmed] = useState(false)
   const [paymentConfirmationText, setPaymentConfirmationText] = useState<string | undefined>(undefined)
+  const [sellerName, setSellerName] = useState<string | undefined>(undefined)
+  const [isProgressThinking, setIsProgressThinking] = useState(false)
+  const initializedRef = useRef(false)
 
-  const pushEventCards = (breakpoints: Breakpoint[]) => {
-    if (!Array.isArray(breakpoints) || breakpoints.length === 0) return
-    const now = Date.now()
-    const eventMessages: Message[] = breakpoints.map((bp, i) => ({
-      id: `${now}-bp-${i}`,
-      role: 'event',
-      content: bp.text || '',
-      timestamp: new Date()
-    }))
-    setMessages(prev => [...prev, ...eventMessages])
+  const getRegisteredAgentName = () => {
+    if (typeof window !== 'undefined') {
+      const v = window.localStorage.getItem('heracles.registeredAgentName')
+      if (v && v.trim().length > 0) return v.trim()
+    }
+    // Fallback default for now; to be sourced from Settings/Dashboard later
+    return 'Alice Tan'
   }
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Keep connectors snappy: 0.1s to 1.5s
+  const randomDelayMs = (min = 100, max = 1500) => Math.floor(Math.random() * (max - min + 1)) + min
 
-    if (!input.trim() || isLoading) return
+  const addEventMessage = (bp: Breakpoint, status: EventStatus = 'done') => {
+    const msg: Message = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      role: 'event',
+      content: bp.text || '',
+      timestamp: new Date(),
+      event: { type: bp.type, status, data: bp }
+    }
+    setMessages(prev => [...prev, msg])
+    return msg.id
+  }
+
+  const addConnectorMessage = (durationMs: number) => {
+    const msg: Message = {
+      id: `${Date.now()}-connector-${Math.random().toString(36).slice(2)}`,
+      role: 'connector',
+      content: '',
+      timestamp: new Date(),
+      connector: { durationMs }
+    }
+    setMessages(prev => [...prev, msg])
+  }
+
+  const updateEventStatusById = (id: string, status: EventStatus) => {
+    setMessages(prev => prev.map(m => (m.id === id ? { ...m, event: m.event ? { ...m.event, status } : m.event } : m)))
+  }
+
+  const markLastEventOfTypeDone = (type: Breakpoint['type'] | string) => {
+    setMessages(prev => {
+      const idx = [...prev].reverse().findIndex(m => m.role === 'event' && m.event?.type === type && m.event.status === 'pending')
+      if (idx === -1) return prev
+      const trueIdx = prev.length - 1 - idx
+      const updated = [...prev]
+      const m = updated[trueIdx]
+      updated[trueIdx] = { ...m, event: m.event ? { ...m.event, status: 'done' } : m.event }
+      return updated
+    })
+  }
+
+  const playBreakpointsSequentially = (bps: Breakpoint[], startDelay = 300) => {
+    let delay = startDelay
+    bps.forEach((bp, i) => {
+      const connectorTime = randomDelayMs()
+      // Draw connector between previous box and next box
+      setTimeout(() => {
+        setIsProgressThinking(true)
+        addConnectorMessage(connectorTime)
+        // After the connector draws, show the next box and mark done
+        setTimeout(() => {
+          const id = addEventMessage(bp, 'pending')
+          setTimeout(() => {
+            updateEventStatusById(id, 'done')
+            setIsProgressThinking(false)
+          }, 600)
+        }, connectorTime)
+      }, delay)
+      // Next delay accumulates
+      delay += connectorTime + 700
+    })
+  }
+
+  const extractSellerName = (action: any): string | undefined => {
+    if (!action) return undefined
+    if (action.payload?.seller?.name) return action.payload.seller.name
+    const desc: string = action.payload?.description || ''
+    const m = desc.match(/from\s+([^\n]+)$/i)
+    if (m && m[1]) return m[1].trim()
+    // Fallback to known single seller scenario
+    return 'Bob Wong'
+  }
+
+  const sendQuickReply = async (text: string) => {
+    if (!text.trim() || isLoading) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: text.trim(),
       timestamp: new Date()
     }
 
     setMessages(prev => [...prev, userMessage])
-    setInput('')
     setIsLoading(true)
 
     try {
-      // Send user input to backend chat API
+      const initialBp: Breakpoint = { type: 'marketplace_search_started', text: 'Retrieving agents from Hedera marketplace...' }
+      const initialId = addEventMessage(initialBp, 'pending')
+
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const resp = await fetch(`${backendUrl}/api/gemini/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: input.trim() })
+        body: JSON.stringify({ input: text.trim() })
       })
       const data = await resp.json()
 
@@ -94,11 +182,23 @@ export default function ChatPage() {
         assistantText = d.message || 'Here are suggested actions.'
         if (d.reasoning) setReasoning(d.reasoning)
         if (d.action) setAssistantAction(d.action)
+        setSellerName(extractSellerName(d.action))
+
+        markLastEventOfTypeDone('marketplace_search_started')
         if (Array.isArray(d.breakpoints)) {
-          pushEventCards(d.breakpoints as Breakpoint[])
+          const remaining = d.breakpoints.filter((bp: Breakpoint) => bp.type !== 'marketplace_search_started') as Breakpoint[]
+          const expanded: Breakpoint[] = remaining.flatMap((bp: Breakpoint) => {
+            if (bp.type === 'seller_verified_ecr8004') {
+              return [
+                { type: 'seller_verifying_ecr8004', text: 'Verifying seller via ECR-8004 protocol...' } as Breakpoint,
+                { type: 'seller_verified_ecr8004', text: 'Verified' } as Breakpoint
+              ]
+            }
+            return [bp]
+          })
+          playBreakpointsSequentially(expanded, 150)
         }
 
-        // Show payment card if payment confirmation requested
         if (d.action && d.action.type === 'request_confirmation') {
           setShowPaymentCard(true)
           setPaymentProcessing(false)
@@ -129,8 +229,80 @@ export default function ChatPage() {
     }
   }
 
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!input.trim() || isLoading) return
+
+    // Capture and clear input, then reuse quick-reply sender
+    const text = input.trim()
+    setInput('')
+    await sendQuickReply(text)
+  }
+
+  // On first mount, simulate loading registered agent and ask for confirmation
+  useEffect(() => {
+    if (initializedRef.current) return
+    initializedRef.current = true
+    const agentName = getRegisteredAgentName()
+    // Add a right sidebar init event
+    const initId = addEventMessage({ type: 'agent_session_initializing', text: 'Initializing agent session...' } as any, 'pending')
+    setIsProgressThinking(true)
+    const connectorTime = randomDelayMs(300, 1200)
+    // Small lead-in then show connector and the loaded event
+    const lead = 250
+    const t1 = setTimeout(() => {
+      addConnectorMessage(connectorTime)
+      const t2 = setTimeout(() => {
+        updateEventStatusById(initId, 'done')
+        addEventMessage({ type: 'agent_session_loaded', text: 'Registered agent loaded.' } as any, 'done')
+        const followMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `I've loaded your registered agent, ${agentName}. Confirm you want to transact on Heracles with this agent account?`,
+          timestamp: new Date()
+        }
+        setMessages(prev => [...prev, followMsg])
+        setIsProgressThinking(false)
+      }, connectorTime)
+      return () => clearTimeout(t2)
+    }, lead)
+    return () => clearTimeout(t1)
+  }, [])
+
+  // Listen for registered agent changes during a session
+  useEffect(() => {
+    const handler = (e: any) => {
+      const name = (e?.detail?.name || '').trim()
+      if (!name) return
+      const msg: Message = {
+        id: (Date.now() + 5).toString(),
+        role: 'assistant',
+        content: `Registered agent updated to ${name} for this session.`,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, msg])
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('heracles:agentNameChanged', handler as any)
+      return () => window.removeEventListener('heracles:agentNameChanged', handler as any)
+    }
+  }, [])
+
   return (
     <main className="min-h-screen flex flex-col">
+      <style jsx>{`
+        @keyframes drawLineKey {
+          from { transform: scaleY(0); }
+          to { transform: scaleY(1); }
+        }
+        .draw-line {
+          transform-origin: top;
+          animation-name: drawLineKey;
+          animation-timing-function: linear;
+          animation-fill-mode: forwards;
+        }
+      `}</style>
       {/* Top navigation bar */}
       <nav className="border-b border-border px-12 py-4">
         <div className="flex items-center justify-between">
@@ -152,8 +324,8 @@ export default function ChatPage() {
         </div>
       </nav>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col p-12 max-w-7xl mx-auto w-full">
+  {/* Main content */}
+  <div className="flex-1 flex flex-col p-12 max-w-7xl mx-auto w-full" style={{ paddingRight: 390 }}>
         {/* Page header */}
         <div className="mb-8">
           <h1 className="text-5xl font-bold mb-2">AI Agent Chat</h1>
@@ -167,27 +339,48 @@ export default function ChatPage() {
         <div className="flex-1 flex flex-col border border-border">
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+            {messages.filter(m => m.role === 'user' || m.role === 'assistant').map((message) => {
+              const isUser = message.role === 'user'
+              const isEvent = false
+              const isConnector = false
+                const quickReplies = !isUser && /confirm\b/i.test(message.content) ?
+                  (message.content.toLowerCase().includes('confirm you want to transact') ? ['Yes','No'] : []) : []
+              return (
                 <div
-                  className={`max-w-[70%] px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-foreground text-background'
-                      : 'bg-foreground/5 border border-border'
-                  }`}
+                  key={message.id}
+                  className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  <p className="text-xs mt-2 opacity-60">
-                    {message.timestamp.toLocaleTimeString()}
-                  </p>
+                  <div
+                    className={`max-w-[70%] px-4 py-3 ${
+                      isUser
+                        ? 'bg-foreground text-background'
+                        : 'bg-foreground/5 border border-border'
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <p className="text-xs mt-2 opacity-60">
+                      {message.timestamp.toLocaleTimeString()}
+                    </p>
+                      {quickReplies.length > 0 && (
+                        <div className="mt-2 flex gap-2 flex-wrap">
+                          {quickReplies.map((qr) => (
+                            <button
+                              key={qr}
+                              onClick={() => sendQuickReply(qr)}
+                              disabled={isLoading}
+                              className="px-3 py-1 text-xs border border-border hover:bg-accent disabled:opacity-50"
+                            >
+                              {qr}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
 
-            {isLoading && (
+            {(isLoading || isProgressThinking) && (
               <div className="flex justify-start">
                 <div className="max-w-[70%] px-4 py-3 bg-foreground/5 border border-border">
                   <p className="text-sm text-foreground/60">Thinking...</p>
@@ -215,6 +408,7 @@ export default function ChatPage() {
                 payee={assistantAction.payload.payee || assistantAction.payload.recipient}
                 amount={assistantAction.payload.amount}
                 description={assistantAction.payload.description || assistantAction.payload.purpose}
+                sellerName={sellerName}
                 isProcessing={paymentProcessing}
                 confirmed={paymentConfirmed}
                 confirmationText={paymentConfirmationText}
@@ -222,15 +416,7 @@ export default function ChatPage() {
                   try {
                     setPaymentProcessing(true)
                     // Add transaction start breakpoint card
-                    setMessages(prev => [
-                      ...prev,
-                      {
-                        id: `${Date.now()}-tx-start`,
-                        role: 'event',
-                        content: 'Initiating transaction on Hedera...',
-                        timestamp: new Date()
-                      }
-                    ])
+                    const txStartId = addEventMessage({ type: 'transaction_started', text: 'Initiating transaction on Hedera...' } as any, 'pending')
                     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
                     const pResp = await fetch(`${backendUrl}/api/payments`, {
                       method: 'POST',
@@ -244,33 +430,52 @@ export default function ChatPage() {
                     const pData = await pResp.json()
 
                     const success = !pData.error
-                    const text = success ? 'Transaction submitted to Hedera network.' : `Payment failed: ${pData.error || 'Unknown error'}`
+                    const text = success
+                      ? `Transaction submitted. Escrow ID: ${pData.escrowId || 'n/a'} | Tx: ${pData.txHash || 'n/a'}`
+                      : `Payment failed: ${pData.error || 'Unknown error'}`
                     setPaymentConfirmed(success)
                     setPaymentConfirmationText(text)
                     setPaymentProcessing(false)
 
                     // Add transaction result breakpoint card
-                    setMessages(prev => [
-                      ...prev,
-                      {
-                        id: `${Date.now()}-tx-result`,
-                        role: 'event',
-                        content: success ? 'Transaction confirmed.' : 'Transaction failed.',
-                        timestamp: new Date()
-                      }
-                    ])
+                    updateEventStatusById(txStartId, success ? 'done' : 'error')
+                    // Draw connector before result to simulate processing time
+                    const txConnectorTime = randomDelayMs()
+                    setIsProgressThinking(true)
+                    addConnectorMessage(txConnectorTime)
+                    await new Promise(res => setTimeout(res, txConnectorTime))
+                    addEventMessage({ type: 'transaction_result', text: success ? 'Transaction confirmed.' : 'Transaction failed.' } as any, success ? 'done' : 'error')
+                    setIsProgressThinking(false)
 
                     const confirmMsg: Message = {
                       id: (Date.now() + 2).toString(),
                       role: 'assistant',
-                      content: success ? 'Payment initiated successfully' : 'Payment failed: ' + (pData.error || JSON.stringify(pData)),
+                      content: success ? `Payment initiated successfully. Escrow: ${pData.escrowId || 'n/a'} | Tx: ${pData.txHash || 'n/a'}` : 'Payment failed: ' + (pData.error || JSON.stringify(pData)),
                       timestamp: new Date()
                     }
                     setMessages(prev => [...prev, confirmMsg])
+
+                    // Record transaction for dashboard
+                    if (success) {
+                      const recordId = (pData.txHash || pData.escrowId || `${Date.now()}`).toString()
+                      addAgentTransaction({
+                        id: recordId,
+                        txHash: pData.txHash,
+                        escrowId: pData.escrowId,
+                        amountHBAR: Number(assistantAction.payload.amount) || 0,
+                        payee: assistantAction.payload.payee || assistantAction.payload.recipient,
+                        sellerName: sellerName,
+                        description: assistantAction.payload.description || assistantAction.payload.purpose,
+                        status: 'completed',
+                        timestamp: Date.now(),
+                        source: 'chat'
+                      })
+                    }
                   } catch (err: any) {
                     setPaymentProcessing(false)
                     setPaymentConfirmed(false)
                     setPaymentConfirmationText('Payment request failed.')
+                    addEventMessage({ type: 'transaction_result', text: 'Transaction failed.' } as any, 'error')
                     const errMsg: Message = {
                       id: (Date.now() + 3).toString(),
                       role: 'assistant',
@@ -283,20 +488,13 @@ export default function ChatPage() {
               />
             </div>
           )}
-                <div
-                  className={`${
-                    message.role === 'event'
-                      ? 'max-w-[60%] text-center font-semibold border-2 border-foreground bg-foreground/5'
-                      : 'max-w-[70%]'
-                  } px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-foreground text-background'
-                      : message.role === 'assistant'
-                        ? 'bg-foreground/5 border border-border'
-                        : ''
-                  }`}
-                >
-                onChange={(e) => setInput(e.target.value)}
+          {/* Input area */}
+          <form onSubmit={handleSendMessage} className="border-t border-border p-4">
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={input}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
                 placeholder="Ask me anything about AI agents, blockchain, or this platform..."
                 className="flex-1 px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
                 disabled={isLoading}
@@ -313,6 +511,18 @@ export default function ChatPage() {
           </form>
         </div>
       </div>
+      {/* Right progress sidebar (fixed) */}
+      {(() => {
+        const progressItems: ProgressItem[] = messages
+          .filter(m => m.role === 'event' || m.role === 'connector')
+          .map(m =>
+            m.role === 'connector'
+              ? { id: m.id, kind: 'connector', durationMs: m.connector?.durationMs || 1000, timestamp: m.timestamp }
+              : { id: m.id, kind: 'event', text: m.content, status: m.event?.status as any, timestamp: m.timestamp }
+          )
+        // Reserve room for the top nav so buttons are usable
+        return <ProgressSidebar items={progressItems} offsetTop={72} />
+      })()}
     </main>
   )
 }
