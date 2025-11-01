@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Send } from 'lucide-react'
+import PaymentRequest from '@/components/payment-request'
 
 interface Message {
   id: string
@@ -22,6 +23,9 @@ export default function ChatPage() {
   ])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [reasoning, setReasoning] = useState<string[] | null>(null)
+  const [assistantAction, setAssistantAction] = useState<any | null>(null)
+  const [showPaymentCard, setShowPaymentCard] = useState(false)
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,17 +43,56 @@ export default function ChatPage() {
     setInput('')
     setIsLoading(true)
 
-    // Simulate bot response (placeholder for now)
-    setTimeout(() => {
+    try {
+      // Send user input to backend chat API
+      const resp = await fetch('/api/gemini/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: input.trim() })
+      })
+      const data = await resp.json()
+
+      let assistantText = ''
+      setReasoning(null)
+      setAssistantAction(null)
+      setShowPaymentCard(false)
+
+      if (!data.success) {
+        assistantText = 'Assistant error: ' + (data.error || 'Unknown error from model')
+      } else if (data.raw) {
+        assistantText = data.raw
+      } else if (data.data) {
+        const d = data.data
+        assistantText = d.message || 'Here are suggested actions.'
+        if (d.reasoning) setReasoning(d.reasoning)
+        if (d.action) setAssistantAction(d.action)
+
+        // Show payment card if payment confirmation requested
+        if (d.action && d.action.type === 'request_confirmation') {
+          setShowPaymentCard(true)
+        }
+      } else {
+        assistantText = 'No response from assistant.'
+      }
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'This is a placeholder response. The chatbot functionality will be implemented soon!',
+        content: assistantText,
         timestamp: new Date()
       }
       setMessages(prev => [...prev, botMessage])
+    } catch (e: any) {
+      const botMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Failed to contact assistant: ' + (e.message || e),
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, botMessage])
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   return (
@@ -118,6 +161,59 @@ export default function ChatPage() {
               </div>
             )}
           </div>
+
+          {/* Reasoning / verification area */}
+          {reasoning && (
+            <div className="border-t border-border p-4 space-y-2">
+              <div className="text-sm font-medium">Agent reasoning</div>
+              <ol className="list-decimal list-inside text-sm text-foreground/80">
+                {reasoning.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Payment card area (embedded) */}
+          {showPaymentCard && assistantAction && assistantAction.payload && (
+            <div className="border-t border-border p-4">
+              <PaymentRequest
+                payee={assistantAction.payload.payee || assistantAction.payload.recipient}
+                amount={assistantAction.payload.amount}
+                description={assistantAction.payload.description || assistantAction.payload.purpose}
+                onSendClick={async () => {
+                  try {
+                    const pResp = await fetch('/api/payments', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        payee: assistantAction.payload.payee || assistantAction.payload.recipient,
+                        amount: assistantAction.payload.amount,
+                        description: assistantAction.payload.description || assistantAction.payload.purpose || 'Payment via chat'
+                      })
+                    })
+                    const pData = await pResp.json()
+                    const confirmMsg: Message = {
+                      id: (Date.now() + 2).toString(),
+                      role: 'assistant',
+                      content: pData.error ? 'Payment failed: ' + (pData.error || JSON.stringify(pData)) : 'Payment initiated successfully',
+                      timestamp: new Date()
+                    }
+                    setMessages(prev => [...prev, confirmMsg])
+                    setShowPaymentCard(false)
+                  } catch (err: any) {
+                    const errMsg: Message = {
+                      id: (Date.now() + 3).toString(),
+                      role: 'assistant',
+                      content: 'Payment request failed: ' + (err.message || err),
+                      timestamp: new Date()
+                    }
+                    setMessages(prev => [...prev, errMsg])
+                  }
+                }}
+              />
+            </div>
+          )}
 
           {/* Input area */}
           <form onSubmit={handleSendMessage} className="border-t border-border p-4">
