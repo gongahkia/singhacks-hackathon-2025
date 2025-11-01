@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { useAccount, useConnect, useDisconnect, useSignMessage } from 'wagmi'
-import { WalletConnectButton } from '../../components/wallet-connect-button'
+import { useAccount, useSignMessage } from 'wagmi'
 import { apiClient } from '../../src/lib/api-client'
 import Link from 'next/link'
 
@@ -20,9 +19,7 @@ export default function SettingsPage() {
   const [connectResult, setConnectResult] = useState<any | null>(null)
 
   // Wallet connection using wagmi
-  const { address: walletAddress, isConnected: walletConnected, connector } = useAccount()
-  const { connect, connectors, isPending } = useConnect()
-  const { disconnect } = useDisconnect()
+  const { address: walletAddress, isConnected: walletConnected } = useAccount()
   const { signMessageAsync } = useSignMessage()
 
   // Gemini settings
@@ -106,36 +103,6 @@ export default function SettingsPage() {
 
   return (
     <main className="min-h-screen">
-      {/* Top navigation bar */}
-      <nav className="border-b border-border px-12 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/heracles-icon.jpg" alt="Heracles" className="w-8 h-8 object-contain" />
-            <h2 className="text-xl font-semibold">Heracles</h2>
-          </div>
-          <div className="flex gap-3">
-            <Link
-              href="/"
-              className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/marketplace"
-              className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium"
-            >
-              Agent Marketplace
-            </Link>
-            <Link
-              href="/chat"
-              className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium"
-            >
-              Chat
-            </Link>
-          </div>
-        </div>
-      </nav>
-
       {/* Main content */}
       <div className="p-12 max-w-7xl mx-auto">
         {/* Page header */}
@@ -333,28 +300,6 @@ export default function SettingsPage() {
               </button>
               {settingsSaveMsg && (
                 <div className="px-4 py-3 text-sm">{settingsSaveMsg}</div>
-              )}
-            </div>
-          </section>
-
-          {/* Connect Crypto Wallet Section */}
-          <section className="border border-border p-8 space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold mb-2">Connect Crypto Wallet</h2>
-              <p className="text-sm text-foreground/60">
-                Link your EVM-compatible wallet (MetaMask or WalletConnect) to interact with the platform.
-              </p>
-            </div>
-
-            <div className="max-w-3xl">
-              <WalletConnectButton />
-              
-              {walletConnected && walletAddress && (
-                <div className="mt-4 p-4 border border-green-200 bg-green-50 text-green-800 text-sm">
-                  <div className="font-medium mb-1">Wallet Connected Successfully!</div>
-                  <div className="text-xs">Connector: {connector?.name || 'Unknown'}</div>
-                  <div className="text-xs font-mono mt-2 break-all">{walletAddress}</div>
-                </div>
               )}
             </div>
           </section>

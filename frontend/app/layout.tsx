@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { WalletProvider } from "../components/wallet-provider"
+import { Header } from "../components/header"
 import "./globals.css"
 
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"] })
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${jetbrainsMono.className} font-mono antialiased`}>
         <WalletProvider>
+          <Header />
           {children}
           <Analytics />
         </WalletProvider>
