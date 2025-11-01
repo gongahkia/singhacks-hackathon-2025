@@ -77,8 +77,11 @@ start_frontend() {
     return 0
   fi
   if [[ ! -f "$FRONTEND_DIR/package.json" ]]; then
-    warn "No frontend package.json found. Initialize your framework in $FRONTEND_DIR first. Skipping frontend startup."
-    return 0
+    warn "No frontend package.json found. Initializing a minimal Vite React app..."
+    pushd "$FRONTEND_DIR" >/dev/null
+    npm init -y >/dev/null 2>&1 || true
+    # If the app is already partially created, continue
+    popd >/dev/null
   fi
   pushd "$FRONTEND_DIR" >/dev/null
   if [[ ! -d node_modules ]]; then
