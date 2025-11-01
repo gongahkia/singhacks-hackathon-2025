@@ -17,6 +17,12 @@ export default function SettingsPage() {
   const [connectError, setConnectError] = useState<string | null>(null)
   const [connectResult, setConnectResult] = useState<any | null>(null)
 
+  // Wallet connection state
+  const [walletType, setWalletType] = useState<'metamask' | 'walletconnect' | ''>('')
+  const [walletAddress, setWalletAddress] = useState('')
+  const [walletConnected, setWalletConnected] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
+
   const onConnect = async () => {
     setConnectError(null)
     setConnectResult(null)
@@ -35,6 +41,29 @@ export default function SettingsPage() {
     } catch (e: any) {
       setConnectError(e.message)
     }
+  }
+
+  const connectWallet = async () => {
+    setWalletError(null)
+    try {
+      if (!walletType) {
+        throw new Error('Please select a wallet type (MetaMask or WalletConnect)')
+      }
+
+      // Simulated wallet connection
+      // In a real implementation, this would integrate with MetaMask or WalletConnect
+      const simulatedAddress = walletAddress || `0x${Math.random().toString(16).substr(2, 40)}`
+      setWalletAddress(simulatedAddress)
+      setWalletConnected(true)
+    } catch (e: any) {
+      setWalletError(e.message)
+    }
+  }
+
+  const disconnectWallet = () => {
+    setWalletAddress('')
+    setWalletConnected(false)
+    setWalletType('')
   }
 
   return (
@@ -77,12 +106,12 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-8">
-            {/* Register/Link Bitcoin Wallet Section */}
+            {/* Register/Link Hedera Agent Section */}
             <section className="border border-border p-8 space-y-6">
               <div>
-                <h2 className="text-lg font-semibold mb-2">Register/Link Your Bitcoin Wallet</h2>
+                <h2 className="text-lg font-semibold mb-2">Register/Link Your Hedera Agent</h2>
                 <p className="text-sm text-foreground/60">
-                  Connect your Bitcoin wallet to the Hedera network by signing a message. This proves you own the wallet without revealing your private key. Fill in your wallet details and sign the verification message.
+                  Connect your Hedera Agent to gain access to the Hedera network.
                 </p>
               </div>
 
@@ -101,22 +130,15 @@ export default function SettingsPage() {
                 />
                 <input
                   className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Agent Name"
+                  placeholder="Agent Name (Optional)"
                   value={agentName}
                   onChange={(e) => setAgentName(e.target.value)}
                 />
                 <input
                   className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Capability (e.g., smart-contracts)"
+                  placeholder="Capability (Optional description)"
                   value={capability}
                   onChange={(e) => setCapability(e.target.value)}
-                />
-                <textarea
-                  className="md:col-span-2 px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  placeholder="Wallet Signature (0x...)"
-                  value={signature}
-                  onChange={(e) => setSignature(e.target.value)}
-                  rows={3}
                 />
               </div>
 
@@ -150,6 +172,85 @@ export default function SettingsPage() {
                   <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
 {JSON.stringify(connectResult, null, 2)}
                   </pre>
+                </div>
+              )}
+            </section>
+
+            {/* Connect Crypto Wallet Section */}
+            <section className="border border-border p-8 space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold mb-2">Connect Crypto Wallet</h2>
+                <p className="text-sm text-foreground/60">
+                  Link your EVM-compatible wallet (MetaMask or WalletConnect) to interact with the platform.
+                </p>
+              </div>
+
+              {!walletConnected ? (
+                <div className="space-y-4 max-w-3xl">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Select Wallet Type</label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        className={`px-4 py-3 border transition-colors ${
+                          walletType === 'metamask'
+                            ? 'border-foreground bg-foreground text-background'
+                            : 'border-border hover:bg-accent'
+                        }`}
+                        onClick={() => setWalletType('metamask')}
+                      >
+                        MetaMask
+                      </button>
+                      <button
+                        className={`px-4 py-3 border transition-colors ${
+                          walletType === 'walletconnect'
+                            ? 'border-foreground bg-foreground text-background'
+                            : 'border-border hover:bg-accent'
+                        }`}
+                        onClick={() => setWalletType('walletconnect')}
+                      >
+                        WalletConnect
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Wallet Address (Optional - will be auto-filled on connect)</label>
+                    <input
+                      className="w-full px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="0x..."
+                      value={walletAddress}
+                      onChange={(e) => setWalletAddress(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={connectWallet}
+                    disabled={!walletType}
+                  >
+                    Connect Wallet
+                  </button>
+
+                  {walletError && (
+                    <div className="p-4 border border-red-200 bg-red-50 text-red-800 text-sm">
+                      Error: {walletError}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4 max-w-3xl">
+                  <div className="p-4 border border-green-200 bg-green-50 text-green-800 text-sm">
+                    <div className="font-medium mb-1">Wallet Connected Successfully!</div>
+                    <div className="text-xs">Type: {walletType === 'metamask' ? 'MetaMask' : 'WalletConnect'}</div>
+                    <div className="text-xs font-mono mt-2">{walletAddress}</div>
+                  </div>
+
+                  <button
+                    className="px-6 py-3 border border-border hover:bg-accent transition-colors font-medium"
+                    onClick={disconnectWallet}
+                  >
+                    Disconnect Wallet
+                  </button>
                 </div>
               )}
             </section>
