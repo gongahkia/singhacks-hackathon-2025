@@ -2,33 +2,48 @@
 const { ethers } = require('ethers');
 const hederaClient = require('./hedera-client');
 
-let PaymentProcessorABI;
-let deploymentInfo;
+let PaymentProcessorABI = null;
+let deploymentInfo = null;
+let paymentProcessorAddressFromEnv = process.env.PAYMENT_PROCESSOR_ADDRESS;
 try {
   PaymentProcessorABI = require('../../contracts/artifacts/contracts/src/PaymentProcessor.sol/PaymentProcessor.json').abi;
   deploymentInfo = require('../../contracts/deployment.json');
 } catch (_e) {
-  PaymentProcessorABI = [];
-  deploymentInfo = { contracts: { PaymentProcessor: process.env.PAYMENT_PROCESSOR_ADDRESS || '0x0000000000000000000000000000000000000000' } };
+  // Artifacts may not exist in dev; defer validation to runtime
 }
 
 class PaymentService {
   constructor() {
-    this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-    this.wallet = new ethers.Wallet(process.env.EVM_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY || '0x' + '0'.repeat(64), this.provider);
-    this.paymentProcessor = new ethers.Contract(
-      deploymentInfo.contracts.PaymentProcessor,
-      PaymentProcessorABI,
-      this.wallet
-    );
+    this.provider = null;
+    this.wallet = null;
+    this.paymentProcessor = null;
+  }
+
+  ensureContract() {
+    if (this.paymentProcessor) return;
+    const { RPC_URL, EVM_PRIVATE_KEY } = process.env;
+    if (!RPC_URL) throw new Error('RPC_URL not set');
+    if (!EVM_PRIVATE_KEY || !EVM_PRIVATE_KEY.startsWith('0x')) {
+      throw new Error('EVM_PRIVATE_KEY must be set (hex 0x...) for ethers operations');
+    }
+    this.provider = new ethers.JsonRpcProvider(RPC_URL);
+    this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
+    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || paymentProcessorAddressFromEnv;
+    if (!address) {
+      throw new Error('PaymentProcessor address not configured. Provide contracts artifacts or set PAYMENT_PROCESSOR_ADDRESS');
+    }
+    if (!PaymentProcessorABI || PaymentProcessorABI.length === 0) {
+      throw new Error('PaymentProcessor ABI not found. Ensure artifacts are built at contracts/artifacts');
+    }
+    this.paymentProcessor = new ethers.Contract(address, PaymentProcessorABI, this.wallet);
   }
 
   async createEscrow(payee, amountInHbar, description) {
+    this.ensureContract();
     const amount = ethers.parseEther(amountInHbar.toString());
     const tx = await this.paymentProcessor.createEscrow(payee, description, { value: amount });
     const receipt = await tx.wait();
 
-    // Try extract event
     let escrowId = undefined;
     try {
       const log = receipt.logs.find(l => {
@@ -46,14 +61,15 @@ class PaymentService {
   }
 
   async releaseEscrow(escrowId) {
+    this.ensureContract();
     // Get escrow details before release to establish trust
     const escrow = await this.getEscrow(escrowId);
-    
+
     // Convert escrowId to bytes32 format if it's a string
-    const escrowIdBytes = ethers.isHexString(escrowId) 
-      ? escrowId 
+    const escrowIdBytes = ethers.isHexString(escrowId)
+      ? escrowId
       : ethers.id(escrowId);
-    
+
     const tx = await this.paymentProcessor.releaseEscrow(escrowIdBytes);
     const receipt = await tx.wait();
     
@@ -83,9 +99,10 @@ class PaymentService {
   }
 
   async refundEscrow(escrowId) {
+    this.ensureContract();
     // Convert escrowId to bytes32 format if needed
-    const escrowIdBytes = ethers.isHexString(escrowId) 
-      ? escrowId 
+    const escrowIdBytes = ethers.isHexString(escrowId)
+      ? escrowId
       : ethers.id(escrowId);
     const tx = await this.paymentProcessor.refundEscrow(escrowIdBytes);
     const receipt = await tx.wait();
@@ -93,9 +110,10 @@ class PaymentService {
   }
 
   async getEscrow(escrowId) {
+    this.ensureContract();
     // Convert escrowId to bytes32 format if needed
-    const escrowIdBytes = ethers.isHexString(escrowId) 
-      ? escrowId 
+    const escrowIdBytes = ethers.isHexString(escrowId)
+      ? escrowId
       : ethers.id(escrowId);
     const e = await this.paymentProcessor.getEscrow(escrowIdBytes);
     return {
@@ -111,6 +129,7 @@ class PaymentService {
   }
 
   async getPayerEscrows(payerAddress) {
+    this.ensureContract();
     const ids = await this.paymentProcessor.getPayerEscrows(payerAddress);
     return Promise.all(ids.map(id => this.getEscrow(id)));
   }

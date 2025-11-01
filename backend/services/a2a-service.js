@@ -15,8 +15,20 @@ try {
 
 class A2AService {
   constructor() {
-    this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-    this.wallet = new ethers.Wallet(process.env.EVM_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY || '0x' + '0'.repeat(64), this.provider);
+    this.provider = null;
+    this.wallet = null;
+    this.agentRegistry = null;
+  }
+
+  ensureInitialized() {
+    if (this.agentRegistry) return;
+    const { RPC_URL, EVM_PRIVATE_KEY } = process.env;
+    if (!RPC_URL) throw new Error('RPC_URL not set');
+    if (!EVM_PRIVATE_KEY || !EVM_PRIVATE_KEY.startsWith('0x')) {
+      throw new Error('EVM_PRIVATE_KEY must be set (hex 0x...) for A2A operations');
+    }
+    this.provider = new ethers.JsonRpcProvider(RPC_URL);
+    this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
     this.agentRegistry = new ethers.Contract(
       deploymentInfo.contracts.AgentRegistry,
       AgentRegistryABI,
@@ -28,6 +40,7 @@ class A2AService {
    * Initiate A2A communication between agents
    */
   async initiateCommunication(fromAgent, toAgent, capability) {
+    this.ensureInitialized();
     try {
       // Verify both agents exist and check trust thresholds
       const fromAgentData = await agentService.getAgent(fromAgent);
@@ -89,6 +102,7 @@ class A2AService {
    * Complete an A2A interaction (establishes trust)
    */
   async completeInteraction(interactionId) {
+    this.ensureInitialized();
     try {
       const tx = await this.agentRegistry.completeA2AInteraction(interactionId);
       const receipt = await tx.wait();
@@ -121,6 +135,7 @@ class A2AService {
    * Get A2A interaction details
    */
   async getInteraction(interactionId) {
+    this.ensureInitialized();
     try {
       const interaction = await this.agentRegistry.getA2AInteraction(interactionId);
       return {
@@ -140,6 +155,7 @@ class A2AService {
    * Get agent's interaction history
    */
   async getAgentInteractions(agentAddress) {
+    this.ensureInitialized();
     try {
       const interactionIds = await this.agentRegistry.getAgentInteractions(agentAddress);
       const interactions = await Promise.all(

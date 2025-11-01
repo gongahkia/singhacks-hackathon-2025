@@ -22,7 +22,6 @@ router.post('/topics/:topicId/messages', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-module.exports = router;
 // Retrieve topic messages from mirror node
 router.get('/topics/:topicId/messages', async (req, res, next) => {
   try {
@@ -31,3 +30,5 @@ router.get('/topics/:topicId/messages', async (req, res, next) => {
     res.json(data);
   } catch (e) { next(e); }
 });
+
+module.exports = router;

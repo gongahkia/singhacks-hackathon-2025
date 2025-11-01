@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config({ path: '../.env' });
 
+// Initialize config service to load saved settings
+const configService = require('./services/config-service');
+configService.initializeEnv();
+
 const agentRoutes = require('./routes/agents');
 const paymentRoutes = require('./routes/payments');
 const messageRoutes = require('./routes/messages');
@@ -11,7 +15,9 @@ const tokenRoutes = require('./routes/tokens');
 const authRoutes = require('./routes/auth');
 const a2aRoutes = require('./routes/a2a');
 const reputationRoutes = require('./routes/reputation');
+const settingsRoutes = require('./routes/settings');
 const errorHandler = require('./utils/error-handler');
+const { version } = require('./package.json');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,6 +42,7 @@ app.use('/api/tokens', tokenRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/a2a', a2aRoutes);
 app.use('/api/reputation', reputationRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -43,7 +50,7 @@ app.get('/api/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     network: process.env.HEDERA_NETWORK,
-    version: '1.0.0'
+    version
   });
 });
 

@@ -14,16 +14,21 @@ class HederaClient {
     this.client = null;
     this.accountId = null;
     this.privateKey = null;
-    this.initialize();
+    // Lazy init to avoid crashing server when env vars are missing at boot
   }
 
-  initialize() {
-    this.accountId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
-    this.privateKey = PrivateKey.fromString(process.env.HEDERA_PRIVATE_KEY);
+  ensureOperator() {
+    if (this.client) return;
+    const { HEDERA_ACCOUNT_ID, HEDERA_PRIVATE_KEY, HEDERA_NETWORK } = process.env;
+    if (!HEDERA_ACCOUNT_ID || !HEDERA_PRIVATE_KEY) {
+      throw new Error('Hedera operator not configured. Set HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY in your environment.');
+    }
+    this.accountId = AccountId.fromString(HEDERA_ACCOUNT_ID);
+    this.privateKey = PrivateKey.fromString(HEDERA_PRIVATE_KEY);
 
-    if (process.env.HEDERA_NETWORK === 'testnet') {
+    if (HEDERA_NETWORK === 'testnet') {
       this.client = Client.forTestnet();
-    } else if (process.env.HEDERA_NETWORK === 'mainnet') {
+    } else if (HEDERA_NETWORK === 'mainnet') {
       this.client = Client.forMainnet();
     } else {
       throw new Error('Invalid HEDERA_NETWORK');
@@ -32,6 +37,7 @@ class HederaClient {
   }
 
   async createTopic(memo) {
+    this.ensureOperator();
     const tx = await new TopicCreateTransaction()
       .setTopicMemo(memo || 'Agent messages')
       .setMaxTransactionFee(new Hbar(2))
@@ -41,6 +47,7 @@ class HederaClient {
   }
 
   async submitMessage(topicId, message) {
+    this.ensureOperator();
     const tx = await new TopicMessageSubmitTransaction()
       .setTopicId(topicId)
       .setMessage(typeof message === 'string' ? message : JSON.stringify(message))
