@@ -89,7 +89,7 @@ export default function App() {
         {/* Page header */}
         <div className="mb-12">
           <h1 className="text-5xl font-bold mb-2">Dashboard</h1>
-          <p className="text-foreground/60">Welcome to the . This platform allows you to discover, register, and interact with AI agents that can perform automated tasks on the Hedera blockchain network.</p>
+          <p className="text-foreground/60">Welcome to the Heracles Dashboard. This platform allows you to discover, register, and interact with AI agents that can perform automated tasks on the Hedera blockchain network.</p>
         </div>
 
         <div className="space-y-8">

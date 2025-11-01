@@ -42,14 +42,7 @@ export default function ProgressSidebar({ items, title = 'Agent progress', width
           <div className="text-xs text-foreground/50">Awaiting your first request…</div>
         ) : (
           items.map((it) =>
-            it.kind === 'connector' ? (
-              <div key={it.id} className="flex justify-center">
-                <div
-                  className="w-[2px] bg-foreground/60 h-6 draw-line"
-                  style={{ animationDuration: `${(it as any).durationMs || 1000}ms` }}
-                />
-              </div>
-            ) : (
+            it.kind === 'connector' ? null : (
               <div
                 key={it.id}
                 className="px-4 py-3 border-2 border-foreground bg-foreground/5 text-center font-semibold"

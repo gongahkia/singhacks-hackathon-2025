@@ -6,6 +6,7 @@ import { Send, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { addAgentTransaction } from '@/lib/tx-store'
 import PaymentRequest from '@/components/payment-request'
 import ProgressSidebar, { type ProgressItem } from '@/components/progress-sidebar'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 type MessageRole = 'user' | 'assistant' | 'event' | 'connector'
 
@@ -40,14 +41,8 @@ type Breakpoint =
   | { type: string; [key: string]: any }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Hello! I\'m your AI agent assistant. How can I help you navigate Heracles today?',
-      timestamp: new Date()
-    }
-  ])
+  // Start with no messages; we'll show the greeting after a short init
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [reasoning, setReasoning] = useState<string[] | null>(null)
@@ -59,6 +54,7 @@ export default function ChatPage() {
   const [sellerName, setSellerName] = useState<string | undefined>(undefined)
   const [isProgressThinking, setIsProgressThinking] = useState(false)
   const initializedRef = useRef(false)
+  const [showAgentConfirm, setShowAgentConfirm] = useState(false)
 
   const getRegisteredAgentName = () => {
     if (typeof window !== 'undefined') {
@@ -68,6 +64,7 @@ export default function ChatPage() {
     // Fallback default for now; to be sourced from Settings/Dashboard later
     return 'Alice tan'
   }
+  const toTitleCase = (s: string) => s.replace(/\b\w+/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase())
 
   // Keep connectors snappy: 0.1s to 1.5s
   const randomDelayMs = (min = 100, max = 1500) => Math.floor(Math.random() * (max - min + 1)) + min
@@ -240,44 +237,36 @@ export default function ChatPage() {
     await sendQuickReply(text)
   }
 
-  // On first mount, simulate loading registered agent and ask for confirmation
+  // On first mount, show a short initialization then prompt to use the agent
   useEffect(() => {
     if (initializedRef.current) return
     initializedRef.current = true
-    const agentName = getRegisteredAgentName()
-    // Add a right sidebar init event
+    // Add a right sidebar init event and resolve it deterministically in 1s
     const initId = addEventMessage({ type: 'agent_session_initializing', text: 'Initializing agent session...' } as any, 'pending')
     setIsProgressThinking(true)
-    // Keep total init under ~1–2s deterministically
-    const lead = 250 // ms before showing connector
-    const connectorTime = 550 // ms fixed connector draw for reliability
-    const finalizeDelay = lead + connectorTime + 250 // total ~1.05s
-
-    const tLead = setTimeout(() => {
-      addConnectorMessage(connectorTime)
-    }, lead)
 
     const tFinalize = setTimeout(() => {
+      // Mark init as done and show the greeting message
       updateEventStatusById(initId, 'done')
-      addEventMessage({ type: 'agent_session_loaded', text: 'Registered agent loaded.' } as any, 'done')
-      const followMsg: Message = {
+      const agent = toTitleCase(getRegisteredAgentName())
+      const greet: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `I've loaded your registered agent, ${agentName}. Confirm you want to transact on Heracles with this agent account?`,
+        content: `Loaded your registered Agent ${agent}. Do you want to use this agent for your transactions?`,
         timestamp: new Date()
       }
-      setMessages(prev => [...prev, followMsg])
+      setMessages(prev => [...prev, greet])
       setIsProgressThinking(false)
-    }, finalizeDelay)
+      setShowAgentConfirm(true)
+    }, 1000)
 
-    // Hard stop fallback to avoid rare stuck state
+    // Safety: ensure we never remain stuck beyond 1.5s
     const tSafety = setTimeout(() => {
       updateEventStatusById(initId, 'done')
       setIsProgressThinking(false)
-    }, 2000)
+    }, 1500)
 
     return () => {
-      clearTimeout(tLead)
       clearTimeout(tFinalize)
       clearTimeout(tSafety)
     }
@@ -541,6 +530,54 @@ export default function ChatPage() {
         // Reserve room for the top nav so buttons are usable
         return <ProgressSidebar items={progressItems} offsetTop={72} />
       })()}
+
+      {/* Agent confirmation dialog */}
+      <Dialog open={showAgentConfirm} onOpenChange={setShowAgentConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Use this agent for transactions?</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-foreground/80">
+            This will use your registered agent for marketplace searches and payments in this session.
+          </div>
+          <DialogFooter>
+            <button
+              className="px-4 py-2 border border-border hover:bg-accent"
+              onClick={() => {
+                setShowAgentConfirm(false)
+                // Optional: notify assistant
+                setMessages(prev => [
+                  ...prev,
+                  {
+                    id: (Date.now() + 10).toString(),
+                    role: 'assistant',
+                    content: 'No problem. You can change agents in Settings anytime.',
+                    timestamp: new Date(),
+                  },
+                ])
+              }}
+            >
+              No
+            </button>
+            <button
+              className="px-4 py-2 bg-foreground text-background hover:bg-foreground/90"
+              onClick={() => {
+                setShowAgentConfirm(false)
+                // After first confirmation, don't auto-run any action; just acknowledge readiness
+                const readyMsg: Message = {
+                  id: (Date.now() + 11).toString(),
+                  role: 'assistant',
+                  content: 'Ready to make transactions.',
+                  timestamp: new Date(),
+                }
+                setMessages(prev => [...prev, readyMsg])
+              }}
+            >
+              Yes
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }
