@@ -170,6 +170,26 @@ export const apiClient = {
     const res = await fetch(`${API_URL}/api/messages/topics/${topicId}/messages?limit=${limit}`)
     return handleResponse<any>(res)
   },
+
+  // ===== Settings =====
+  async getSettings() {
+    const res = await fetch(`${API_URL}/api/settings`)
+    return handleResponse<{ success: boolean; config: Record<string, string> }>(res)
+  },
+
+  async updateSettings(config: Record<string, string>) {
+    const res = await fetch(`${API_URL}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    })
+    return handleResponse<{ success: boolean; message: string; config: Record<string, string> }>(res)
+  },
+
+  async getSettingsSchema() {
+    const res = await fetch(`${API_URL}/api/settings/schema`)
+    return handleResponse<{ success: boolean; schema: Record<string, any> }>(res)
+  },
 }
 
 export default apiClient
