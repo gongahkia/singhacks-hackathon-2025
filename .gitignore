@@ -47,3 +47,7 @@ coverage/
 *.tmp
 temp/
 
+# External/vendor directories
+x402-hedera-main/
+erc-8004-contracts-master/
+
