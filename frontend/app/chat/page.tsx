@@ -66,7 +66,7 @@ export default function ChatPage() {
       if (v && v.trim().length > 0) return v.trim()
     }
     // Fallback default for now; to be sourced from Settings/Dashboard later
-    return 'Alice Tan'
+    return 'Alice tan'
   }
 
   // Keep connectors snappy: 0.1s to 1.5s
@@ -248,26 +248,39 @@ export default function ChatPage() {
     // Add a right sidebar init event
     const initId = addEventMessage({ type: 'agent_session_initializing', text: 'Initializing agent session...' } as any, 'pending')
     setIsProgressThinking(true)
-    const connectorTime = randomDelayMs(300, 1200)
-    // Small lead-in then show connector and the loaded event
-    const lead = 250
-    const t1 = setTimeout(() => {
+    // Keep total init under ~1–2s deterministically
+    const lead = 250 // ms before showing connector
+    const connectorTime = 550 // ms fixed connector draw for reliability
+    const finalizeDelay = lead + connectorTime + 250 // total ~1.05s
+
+    const tLead = setTimeout(() => {
       addConnectorMessage(connectorTime)
-      const t2 = setTimeout(() => {
-        updateEventStatusById(initId, 'done')
-        addEventMessage({ type: 'agent_session_loaded', text: 'Registered agent loaded.' } as any, 'done')
-        const followMsg: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: `I've loaded your registered agent, ${agentName}. Confirm you want to transact on Heracles with this agent account?`,
-          timestamp: new Date()
-        }
-        setMessages(prev => [...prev, followMsg])
-        setIsProgressThinking(false)
-      }, connectorTime)
-      return () => clearTimeout(t2)
     }, lead)
-    return () => clearTimeout(t1)
+
+    const tFinalize = setTimeout(() => {
+      updateEventStatusById(initId, 'done')
+      addEventMessage({ type: 'agent_session_loaded', text: 'Registered agent loaded.' } as any, 'done')
+      const followMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: `I've loaded your registered agent, ${agentName}. Confirm you want to transact on Heracles with this agent account?`,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, followMsg])
+      setIsProgressThinking(false)
+    }, finalizeDelay)
+
+    // Hard stop fallback to avoid rare stuck state
+    const tSafety = setTimeout(() => {
+      updateEventStatusById(initId, 'done')
+      setIsProgressThinking(false)
+    }, 2000)
+
+    return () => {
+      clearTimeout(tLead)
+      clearTimeout(tFinalize)
+      clearTimeout(tSafety)
+    }
   }, [])
 
   // Listen for registered agent changes during a session
@@ -415,6 +428,11 @@ export default function ChatPage() {
                 onSendClick={async () => {
                   try {
                     setPaymentProcessing(true)
+                    // Connector between "Payment request ready" and "Initiating transaction"
+                    const preTxConnector = randomDelayMs()
+                    setIsProgressThinking(true)
+                    addConnectorMessage(preTxConnector)
+                    await new Promise(res => setTimeout(res, preTxConnector))
                     // Add transaction start breakpoint card
                     const txStartId = addEventMessage({ type: 'transaction_started', text: 'Initiating transaction on Hedera...' } as any, 'pending')
                     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
