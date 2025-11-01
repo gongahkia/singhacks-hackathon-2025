@@ -8,15 +8,46 @@ interface PaymentRequestProps {
   isProcessing?: boolean
   confirmed?: boolean
   confirmationText?: string
+  currency?: 'HBAR' | 'USDC'
+  onCurrencyChange?: (currency: 'HBAR' | 'USDC') => void
+  agentWalletAddress?: string | null
+  useAgentWallet?: boolean
+  onWalletToggle?: (useAgentWallet: boolean) => void
+  canUseAgentWallet?: boolean // Whether agent has a wallet available
+  userWalletAddress?: string | null
   onSendClick: () => void
 }
 
-export default function PaymentRequest({ payee, amount, description, sellerName, isProcessing, confirmed, confirmationText, onSendClick }: PaymentRequestProps) {
+export default function PaymentRequest({ 
+  payee, 
+  amount, 
+  description, 
+  sellerName, 
+  isProcessing, 
+  confirmed, 
+  confirmationText, 
+  currency = 'HBAR', 
+  onCurrencyChange, 
+  agentWalletAddress,
+  useAgentWallet = false,
+  onWalletToggle,
+  canUseAgentWallet = false,
+  userWalletAddress,
+  onSendClick 
+}: PaymentRequestProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-5xl font-bold mb-2">Payment Request</h1>
-        <p className="text-foreground/60">Confirm the details and send the payment on Hedera</p>
+        <h2 className="text-2xl font-bold mb-2">Payment Request</h2>
+        <p className="text-sm text-foreground/60">Confirm the details and send the payment on Hedera</p>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs text-blue-600 border border-blue-500 px-2 py-1 rounded flex items-center gap-1">
+            💵 x402 Protocol
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Using official x402 payment facilitator
+          </span>
+        </div>
       </div>
 
       {confirmed && (
@@ -26,10 +57,10 @@ export default function PaymentRequest({ payee, amount, description, sellerName,
         </div>
       )}
 
-      <div className="space-y-6 max-w-2xl">
+      <div className="space-y-4 max-w-2xl">
         {/* Recipient Section */}
-        <div className="border border-border p-8 space-y-4">
-          <h2 className="text-lg font-semibold">Recipient Agent</h2>
+        <div className="border border-border p-6 space-y-3">
+          <h3 className="text-base font-semibold">Recipient Agent</h3>
           <div className="space-y-2">
             {sellerName && (
               <>
@@ -38,22 +69,103 @@ export default function PaymentRequest({ payee, amount, description, sellerName,
               </>
             )}
             <div className="text-sm text-foreground/60">Agent Account ID</div>
-            <div className="text-xl font-semibold">{payee}</div>
+            <div className="text-xl font-semibold break-all">{payee}</div>
+          </div>
+        </div>
+
+        {/* Wallet Selection Toggle */}
+        <div className="border border-border p-6 space-y-3">
+          <h3 className="text-base font-semibold">Payment Source</h3>
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <button
+                onClick={() => onWalletToggle?.(false)}
+                disabled={isProcessing || confirmed || !userWalletAddress}
+                className={`flex-1 px-4 py-3 border rounded transition-colors ${
+                  !useAgentWallet
+                    ? 'bg-blue-500/20 text-blue-600 border-blue-500/50'
+                    : 'border-border hover:bg-accent'
+                } ${(!userWalletAddress || isProcessing || confirmed) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <div className="text-sm font-semibold">💳 My Wallet</div>
+                {userWalletAddress && (
+                  <div className="text-xs text-foreground/60 mt-1 font-mono">
+                    {userWalletAddress.substring(0, 10)}...{userWalletAddress.substring(userWalletAddress.length - 8)}
+                  </div>
+                )}
+                {!userWalletAddress && (
+                  <div className="text-xs text-red-500 mt-1">Wallet not connected</div>
+                )}
+              </button>
+              <button
+                onClick={() => onWalletToggle?.(true)}
+                disabled={isProcessing || confirmed || !canUseAgentWallet}
+                className={`flex-1 px-4 py-3 border rounded transition-colors ${
+                  useAgentWallet
+                    ? 'bg-purple-500/20 text-purple-600 border-purple-500/50'
+                    : 'border-border hover:bg-accent'
+                } ${(!canUseAgentWallet || isProcessing || confirmed) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <div className="text-sm font-semibold">🤖 Agent Wallet</div>
+                {agentWalletAddress && (
+                  <div className="text-xs text-foreground/60 mt-1 font-mono">
+                    {agentWalletAddress.substring(0, 10)}...{agentWalletAddress.substring(agentWalletAddress.length - 8)}
+                  </div>
+                )}
+                {!canUseAgentWallet && (
+                  <div className="text-xs text-red-500 mt-1">Agent has no wallet</div>
+                )}
+              </button>
+            </div>
+            <div className="text-xs text-foreground/60">
+              {useAgentWallet 
+                ? 'Payment will be made from the agent\'s wallet (no signature required)'
+                : 'Payment will be made from your wallet (signature required)'}
+            </div>
           </div>
         </div>
 
         {/* Amount Section */}
-        <div className="border border-border p-8 space-y-4">
-          <h2 className="text-lg font-semibold">Amount</h2>
+        <div className="border border-border p-6 space-y-4">
+          <h3 className="text-base font-semibold">Amount</h3>
+          <div className="space-y-4">
+            <div>
+              <div className="text-sm text-foreground/60 mb-2">Currency</div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => onCurrencyChange?.('HBAR')}
+                  className={`px-4 py-2 border rounded transition-colors ${
+                    currency === 'HBAR'
+                      ? 'bg-foreground text-background border-foreground'
+                      : 'border-border hover:bg-accent'
+                  }`}
+                  disabled={isProcessing || confirmed}
+                >
+                  HBAR
+                </button>
+                <button
+                  onClick={() => onCurrencyChange?.('USDC')}
+                  className={`px-4 py-2 border rounded transition-colors ${
+                    currency === 'USDC'
+                      ? 'bg-foreground text-background border-foreground'
+                      : 'border-border hover:bg-accent'
+                  }`}
+                  disabled={isProcessing || confirmed}
+                >
+                  USDC
+                </button>
+              </div>
+            </div>
           <div className="space-y-2">
-            <div className="text-sm text-foreground/60">HBAR Amount</div>
+              <div className="text-sm text-foreground/60">{currency} Amount</div>
             <div className="text-4xl font-bold">{amount}</div>
+            </div>
           </div>
         </div>
 
         {/* Purpose Section */}
-        <div className="border border-border p-8 space-y-4">
-          <h2 className="text-lg font-semibold">Transaction Purpose</h2>
+        <div className="border border-border p-6 space-y-3">
+          <h3 className="text-base font-semibold">Transaction Purpose</h3>
           <div className="space-y-2">
             <div className="text-sm text-foreground/60">Description</div>
             <div className="text-foreground/80">{description || 'Payment via chat'}</div>

@@ -110,6 +110,30 @@ class HederaClient {
       .setMessage(typeof message === 'string' ? message : JSON.stringify(message))
       .execute(this.client);
     const receipt = await tx.getReceipt(this.client);
+    
+    // Parse message and emit to relevant WebSocket rooms
+    try {
+      const { app } = require('../server');
+      const io = app.get('io');
+      
+      if (io) {
+        const parsed = typeof message === 'string' ? JSON.parse(message) : message;
+        
+        // Emit to agent rooms
+        if (parsed.fromAgent) io.to(`agent-${parsed.fromAgent}`).emit('hcs-message', parsed);
+        if (parsed.toAgent) io.to(`agent-${parsed.toAgent}`).emit('hcs-message', parsed);
+        if (parsed.payer) io.to(`agent-${parsed.payer}`).emit('hcs-message', parsed);
+        if (parsed.payee) io.to(`agent-${parsed.payee}`).emit('hcs-message', parsed);
+        
+        // Emit to timeline rooms
+        if (parsed.transactionId) io.to(`timeline-${parsed.transactionId}`).emit('timeline-update', parsed);
+        if (parsed.escrowId) io.to(`timeline-${parsed.escrowId}`).emit('timeline-update', parsed);
+        if (parsed.interactionId) io.to(`timeline-${parsed.interactionId}`).emit('timeline-update', parsed);
+      }
+    } catch (error) {
+      console.warn('Failed to emit WebSocket event:', error.message);
+    }
+    
     return {
       topicId,
       sequenceNumber: receipt.topicSequenceNumber?.toString?.() || '0',

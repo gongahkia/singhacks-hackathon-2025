@@ -6,11 +6,24 @@ const paymentService = require('../services/payment-service');
 // Create escrow payment
 router.post('/', async (req, res, next) => {
   try {
-    const { payee, amount, description, payer, payerPrivateKey, signedTx, expirationDays } = req.body;
+    const { payee, amount, description, payer, payerPrivateKey, signedTx, expirationDays, currency } = req.body;
     if (!payee || !amount || !description) {
       return res.status(400).json({ error: 'Payee, amount, and description are required' });
     }
     if (amount <= 0) return res.status(400).json({ error: 'Amount must be greater than 0' });
+    
+    // If currency is specified and not HBAR, use multi-currency method
+    if (currency && currency !== 'HBAR') {
+      const result = await paymentService.createMultiCurrencyEscrow(
+        currency,
+        payee,
+        amount,
+        description,
+        payer || null,
+        payerPrivateKey || null
+      );
+      return res.json(result);
+    }
     
     // Phase 1 (Demo): If payer and payerPrivateKey provided, use agent wallet
     // Phase 2 (Production): If signedTx provided, use signed transaction
@@ -62,6 +75,34 @@ router.get('/payer/:address', async (req, res, next) => {
   try {
     const escrows = await paymentService.getPayerEscrows(req.params.address);
     res.json({ escrows, count: escrows.length });
+  } catch (e) { next(e); }
+});
+
+// Create multi-currency payment (HBAR or USDC)
+router.post('/multi-currency', async (req, res, next) => {
+  try {
+    const { currency, payee, amount, description, payer, payerPrivateKey } = req.body;
+    
+    if (!payee || !amount || !description || !payer) {
+      return res.status(400).json({ 
+        error: 'payee, amount, description, and payer are required' 
+      });
+    }
+    
+    if (amount <= 0) {
+      return res.status(400).json({ error: 'Amount must be greater than 0' });
+    }
+    
+    const result = await paymentService.createMultiCurrencyEscrow(
+      currency || 'HBAR',
+      payee,
+      amount,
+      description,
+      payer,
+      payerPrivateKey
+    );
+    
+    res.json(result);
   } catch (e) { next(e); }
 });
 

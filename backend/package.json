@@ -13,18 +13,31 @@
     "agents",
     "erc-8004",
     "x402",
-    "blockchain"
+    "blockchain",
+    "groq",
+    "mcp",
+    "ai-agents",
+    "micropayments",
+    "web3"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@hashgraph/sdk": "^2.76.0",
+    "@hashgraphonline/standards-agent-kit": "^0.2.164",
+    "@hashgraphonline/standards-sdk": "^0.1.126",
+    "@langchain/core": "^1.0.2",
+    "@langchain/groq": "^1.0.0",
     "axios": "^1.13.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "ethers": "^6.15.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "hedera-agent-kit": "^3.4.0",
+    "langchain": "^1.0.2",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

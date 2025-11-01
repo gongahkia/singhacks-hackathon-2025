@@ -1,6 +1,8 @@
 // server.js
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
+const { Server } = require('socket.io');
 require('dotenv').config({ path: '../.env' });
 
 // Initialize config service to load saved settings
@@ -17,11 +19,26 @@ const a2aRoutes = require('./routes/a2a');
 const reputationRoutes = require('./routes/reputation');
 const settingsRoutes = require('./routes/settings');
 const transactionRoutes = require('./routes/transactions');
+const aiRoutes = require('./routes/ai');
+const mcpRoutes = require('./routes/mcp');
+const timelineRoutes = require('./routes/timeline');
+const agentConnectionRoutes = require('./routes/agent-connection');
 const errorHandler = require('./utils/error-handler');
 const { version } = require('./package.json');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST']
+  }
+});
+
 const PORT = process.env.PORT || 3001;
+
+// Make io available to routes and services
+app.set('io', io);
 
 // Middleware
 app.use(cors());
@@ -45,6 +62,10 @@ app.use('/api/a2a', a2aRoutes);
 app.use('/api/reputation', reputationRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/mcp', mcpRoutes);
+app.use('/api/timeline', timelineRoutes);
+app.use('/api/agent-connection', agentConnectionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -64,12 +85,80 @@ app.use((req, res) => {
 // Error handler
 app.use(errorHandler);
 
+// WebSocket connection handling
+io.on('connection', async (socket) => {
+  console.log('🔌 Client connected:', socket.id);
+  
+  // Subscribe to agent updates
+  socket.on('subscribe-agent', async (agentAddress) => {
+    socket.join(`agent-${agentAddress}`);
+    console.log(`📡 Client ${socket.id} subscribed to agent ${agentAddress}`);
+    
+    // Send AI-powered welcome message using Groq
+    try {
+      const groqService = require('./services/groq-service');
+      const agentService = require('./services/agent-service');
+      
+      const agent = await agentService.getAgent(agentAddress);
+      
+      const welcomeMsg = await groqService.chat(
+        `Create a brief, friendly welcome message for agent "${agent.name}" with trust score ${agent.trustScore}. Keep it under 50 words.`,
+        'You create brief, professional welcome messages for blockchain agents. Be concise and highlight the agent\'s trust score.'
+      );
+      
+      socket.emit('welcome', {
+        message: welcomeMsg.data?.message || welcomeMsg.raw,
+        agent: {
+          name: agent.name,
+          trustScore: agent.trustScore
+        }
+      });
+    } catch (error) {
+      console.warn('Could not send welcome message:', error.message);
+    }
+  });
+  
+  // Subscribe to transaction timeline updates
+  socket.on('subscribe-timeline', (transactionId) => {
+    socket.join(`timeline-${transactionId}`);
+    console.log(`📊 Client ${socket.id} subscribed to timeline ${transactionId}`);
+  });
+  
+  // Unsubscribe from agent
+  socket.on('unsubscribe-agent', (agentAddress) => {
+    socket.leave(`agent-${agentAddress}`);
+    console.log(`📴 Client ${socket.id} unsubscribed from agent ${agentAddress}`);
+  });
+  
+  // Unsubscribe from timeline
+  socket.on('unsubscribe-timeline', (transactionId) => {
+    socket.leave(`timeline-${transactionId}`);
+    console.log(`📴 Client ${socket.id} unsubscribed from timeline ${transactionId}`);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('🔌 Client disconnected:', socket.id);
+  });
+});
+
+// Initialize agent service and load Alice/Bob wallets from env on startup
+const agentServiceInstance = require('./services/agent-service');
+const AgentService = agentServiceInstance.constructor;
+(async () => {
+  try {
+    await AgentService.loadAliceBobWalletsFromEnv();
+  } catch (error) {
+    console.warn('⚠️  Failed to load Alice/Bob wallets on startup:', error.message);
+  }
+})();
+
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('🚀 Hedera Agent Economy Backend');
   console.log(`📍 Server running on port ${PORT}`);
   console.log(`🌐 Network: ${process.env.HEDERA_NETWORK || 'unset'}`);
   console.log(`🔗 Health: http://localhost:${PORT}/api/health`);
+  console.log(`⚡ WebSocket enabled for real-time updates`);
 });
 
-module.exports = app;
+module.exports = { app, io, server };

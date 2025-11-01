@@ -45,5 +45,28 @@ router.post('/trust/payment', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Get hybrid trust score (custom + ERC-8004)
+router.get('/agents/:address/hybrid-trust', async (req, res, next) => {
+  try {
+    const { address } = req.params;
+    const { officialAgentId } = req.query;
+    
+    // If not provided, try to auto-fetch from mapping
+    let erc8004Id = officialAgentId ? parseInt(officialAgentId) : null;
+    if (!erc8004Id) {
+      const agentService = require('../services/agent-service');
+      const mappedId = agentService.constructor.getERC8004AgentId(address);
+      erc8004Id = mappedId ? parseInt(mappedId) : null;
+    }
+    
+    const hybridTrust = await reputationService.getHybridTrustScore(
+      address,
+      erc8004Id
+    );
+    
+    res.json(hybridTrust);
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
 

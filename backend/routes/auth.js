@@ -8,12 +8,25 @@ router.post('/verify-signature', async (req, res) => {
   if (!message || !signature) return res.status(400).json({ error: 'message and signature required' });
 
   try {
-    const recovered = ethers.verifyMessage(JSON.stringify(message), signature);
-    if (evmAddress && recovered.toLowerCase() !== evmAddress.toLowerCase()) {
-      return res.status(400).json({ verified: false, error: 'address mismatch' });
+    // Reconstruct the exact message string that was signed
+    const messageString = JSON.stringify(message);
+    const recovered = ethers.verifyMessage(messageString, signature);
+    
+    // Check against message.address first (if included), then evmAddress parameter
+    const expectedAddress = message.address || evmAddress;
+    
+    if (expectedAddress && recovered.toLowerCase() !== expectedAddress.toLowerCase()) {
+      return res.status(400).json({ 
+        verified: false, 
+        error: 'address mismatch',
+        details: {
+          recovered: recovered,
+          expected: expectedAddress
+        }
+      });
     }
 
-    return res.json({ verified: true, recovered, accountId });
+    return res.json({ verified: true, recovered, accountId, evmAddress: recovered });
   } catch (e) {
     return res.status(400).json({ verified: false, error: e.message });
   }

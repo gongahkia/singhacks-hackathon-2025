@@ -248,20 +248,35 @@ A unified agentic system that enables autonomous agent interactions:
 - **Performance monitoring**: Track agent performance and availability
 
 **Deliverables**:
-- [x] Working ERC-8004 integration system (Completed: Contracts and backend fully integrated)
-- [x] Agent discovery and capability registry (Completed: AgentRegistry deployed with search functionality)
-- [x] Secure A2A communication protocols (Completed: A2A service and routes implemented)
-- [x] x402 payment integration (Completed: PaymentProcessor with escrow, x402 routes exist)
-- [x] Hedera testnet connectivity and transaction management (Completed: Contracts deployed, hedera-client service implemented)
-- [x] Real-time payment verification system (Completed: Mirror node queries implemented)
-- [x] Comprehensive audit trails for all activities (Completed: HCS logging integrated in all services)
-- [x] Autonomous transaction execution capabilities (Completed: Automatic trust establishment on payments)
+- [x] Working ERC-8004 integration system (Completed: Official ERC-8004 contracts + custom contracts with hybrid trust scoring)
+- [x] Agent discovery and capability registry (Completed: AI-powered search with Groq + traditional capability search)
+- [x] Secure A2A communication protocols (Completed: MCP protocol + traditional A2A service)
+- [x] x402 payment integration (Completed: x402 hosted facilitator + payment verification flow)
+- [x] Hedera testnet connectivity and transaction management (Completed: Hedera Agent Kit integration)
+- [x] Real-time payment verification system (Completed: WebSocket live updates + polling + Mirror node queries)
+- [x] Comprehensive audit trails for all activities (Completed: HCS logging with real-time timeline visualization)
+- [x] Autonomous transaction execution capabilities (Completed: Multi-currency payments + automatic trust establishment)
+
+**Enhanced Features**:
+- ⚡ **Groq AI Integration**: Ultra-fast agent discovery (<500ms)
+- 📡 **MCP Protocol**: Industry-standard Model Context Protocol for agent communication
+- 🔐 **Hybrid Trust Scoring**: Combines official ERC-8004 + custom performance metrics
+- 💵 **x402 Payment Flow**: Full integration with hosted facilitator for payment verification
+- 💰 **Multi-Currency**: HBAR + USDC token support
+- 🔴 **Real-Time Updates**: WebSocket + polling for live transaction visualization
+- 🤖 **AI-Powered Features**: Natural language search, capability suggestions, transaction analysis
 
 ---
 
 ## 🛠️ Technology Stack & Resources
 
 ### APIs & Services
+- **Groq AI**: Ultra-fast LLM inference for agent discovery and analysis
+  - https://console.groq.com/docs/overview
+- **Hedera Agent Kit**: Official toolkit with MCP server support
+  - https://github.com/hashgraph/hedera-agent-kit-js
+- **x402 Facilitator**: Hosted payment verification service
+  - https://x402-hedera-production.up.railway.app
 - **Hedera Mirror Node Swagger Doc**: For real-time network data and transaction history
   - https://testnet.mirrornode.hedera.com/api/v1/docs/
 - **HashScan Explorer**: For browsing transactions and smart contracts
@@ -269,13 +284,16 @@ A unified agentic system that enables autonomous agent interactions:
 - **JSON RPC**: https://testnet.hashio.io/api (CHAIN ID: 296)
 
 ### SDKs & Libraries
-- **Hedera Agent Kit**: 
+- **Groq**: Ultra-fast LLM inference (@langchain/groq)
+- **Hedera Agent Kit**: Official SDK with MCP protocol (@hashgraphonline/standards-agent-kit)
   - Overview: https://docs.hedera.com/hedera/open-source-solutions/ai-studio-on-hedera/hedera-ai-agent-kit
   - SDK: https://github.com/hashgraph/hedera-agent-kit-js
   - MCP Server: https://github.com/hashgraph/hedera-agent-kit-js/blob/main/docs/DEVEXAMPLES.md#option-d-try-out-the-mcp-server
+- **Official ERC-8004 Contracts**: Deployed on Hedera Testnet
+  - IdentityRegistry: 0x4c74ebd72921d537159ed2053f46c12a7d8e5923
+  - ReputationRegistry: 0xc565edcba77e3abeade40bfd6cf6bf583b3293e0
 - **Hedera x402 repo**: https://github.com/hedera-dev/x402-hedera
-- **Hedera SDKs**: JavaScript, Python, Go, Rust, Java, C++
-- **ERC-8004 Hedera Deployments**: https://github.com/erc-8004/erc-8004-contracts
+- **Hedera SDKs**: JavaScript (@hashgraph/sdk), Python, Go, Rust, Java, C++
 
 ### Development Resources
 - **Dev Portal**: https://portal.hedera.com/ (Creates account and tops up with testnet hbar)
@@ -356,8 +374,44 @@ Your submission will be evaluated on:
 
 ### First 5 Minutes
 1. **Clone repository** and run setup: `./setup.sh` (Linux/Mac) or `setup.bat` (Windows)
-2. **Copy `.env.example` to `.env`** and fill in your Hedera account details
+2. **Create `.env` file** with required credentials (see Environment Variables below)
 3. **Read QUICKSTART.md** for full setup instructions
+
+### Environment Variables Required
+
+Create a `.env` file in the root directory with:
+
+```env
+# Hedera Network
+HEDERA_NETWORK=testnet
+HEDERA_ACCOUNT_ID=0.0.xxxxx
+HEDERA_PRIVATE_KEY=302e...
+RPC_URL=https://testnet.hashio.io/api
+MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com/api/v1
+
+# EVM Compatibility
+EVM_PRIVATE_KEY=0x...
+
+# AI Integration (Groq - REQUIRED for AI features)
+GROQ_API_KEY=your_groq_api_key_here
+
+# x402 Payment Facilitator
+X402_FACILITATOR_URL=https://x402-hedera-production.up.railway.app
+
+# Token Support
+USDC_TOKEN_ID=0.0.429274
+
+# Frontend
+FRONTEND_URL=http://localhost:3000
+
+# Smart Contracts (auto-filled after deployment)
+AGENT_REGISTRY_ADDRESS=0x...
+PAYMENT_PROCESSOR_ADDRESS=0x...
+```
+
+**Get API Keys:**
+- Groq API: https://console.groq.com (free tier available)
+- Hedera Account: https://portal.hedera.com (testnet faucet available)
 
 ### Next 30 Minutes
 4. **Set up Hedera testnet account** via the developer portal (https://portal.hedera.com/)

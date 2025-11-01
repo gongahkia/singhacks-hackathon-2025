@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Star, Download, Shield } from "lucide-react"
+import { AIAgentSearch } from "@/components/ai-agent-search"
+import { ProtocolInfoPanel } from "@/components/protocol-badge"
 
 interface Agent {
   name: string
@@ -13,6 +15,19 @@ interface Agent {
   trustScore: string
   registeredAt: string
   isActive: boolean
+  agentId?: string
+  erc8004AgentId?: string | null
+}
+
+interface HybridTrust {
+  final: number
+  hybrid: number
+  custom: number
+  official: number
+  weights: {
+    custom: number
+    official: number
+  }
 }
 
 export default function MarketplacePage() {
@@ -21,11 +36,19 @@ export default function MarketplacePage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [trustScores, setTrustScores] = useState<Map<string, HybridTrust>>(new Map())
 
   const categories = ["All", "Finance", "Trading", "Security", "DeFi", "NFT", "Governance", "Utility", "Infrastructure", "Analytics"]
 
   useEffect(() => {
     fetchAgents()
+    
+    // Poll for new agents every 10 seconds
+    const interval = setInterval(() => {
+      fetchAgents()
+    }, 10000)
+    
+    return () => clearInterval(interval)
   }, [])
 
   const fetchAgents = async () => {
@@ -36,7 +59,25 @@ export default function MarketplacePage() {
       const res = await fetch(`${BASE_URL}/api/agents`)
       if (!res.ok) throw new Error('Failed to fetch agents from backend')
       const data = await res.json()
-      setAgents(data.agents || [])
+      const fetchedAgents = data.agents || []
+      setAgents(fetchedAgents)
+      
+      // Fetch hybrid trust scores for all agents
+      const trustMap = new Map<string, HybridTrust>()
+      await Promise.all(
+        fetchedAgents.map(async (agent: Agent) => {
+          try {
+            const trustRes = await fetch(`${BASE_URL}/api/reputation/agents/${agent.address}/hybrid-trust`)
+            if (trustRes.ok) {
+              const trustData = await trustRes.json()
+              trustMap.set(agent.address, trustData)
+            }
+          } catch (e) {
+            // Failed to fetch trust, use default
+          }
+        })
+      )
+      setTrustScores(trustMap)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -59,11 +100,35 @@ export default function MarketplacePage() {
           <h1 className="text-5xl font-bold mb-2">Agent Marketplace</h1>
           <p className="text-foreground/60">Discover AI agents registered on the Hedera blockchain. Each agent is an automated program that can perform specific tasks like trading tokens, managing NFTs, or executing smart contracts. Browse by category or search for agents with specific capabilities.</p>
 
-          {/* Search Bar */}
+          {/* Protocol Compliance Panel */}
+          <div className="mt-6">
+            <ProtocolInfoPanel />
+          </div>
+
+          {/* Register Agent Button */}
+          <div className="mt-6">
+            <Link
+              href="/deploy-agent"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white hover:bg-blue-700 transition-colors rounded-lg"
+            >
+              <span>+</span>
+              <span>Register New Agent</span>
+            </Link>
+            <p className="text-xs text-muted-foreground mt-2">
+              Register your AI agent and it will automatically appear in the marketplace with ERC-8004 compliance
+            </p>
+          </div>
+
+          {/* AI-Powered Search */}
           <div className="mt-8">
+            <AIAgentSearch />
+          </div>
+
+          {/* Traditional Search Bar */}
+          <div className="mt-6">
             <input
               type="text"
-              placeholder="Search agents by name, capabilities, or wallet address..."
+              placeholder="Or use traditional search by name, capabilities, or wallet address..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full px-6 py-4 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
@@ -136,9 +201,18 @@ export default function MarketplacePage() {
                 {/* Agent Header */}
                 <div className="mb-4">
                   <div className="flex items-start justify-between mb-2">
-                    <h3 className="text-xl font-semibold group-hover:text-foreground/80 transition-colors">
-                      {agent.name}
-                    </h3>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-semibold group-hover:text-foreground/80 transition-colors">
+                          {agent.name}
+                        </h3>
+                        {agent.paymentMode === 'permissionless' && (
+                          <span className="text-xs px-1.5 py-0.5 bg-purple-500/20 text-purple-600 border border-purple-500/30 rounded" title="Autonomous payment agent">
+                            🤖
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <Badge variant="outline" className="shrink-0 text-xs">
                       {agent.isActive ? 'Active' : 'Inactive'}
                     </Badge>
@@ -146,6 +220,11 @@ export default function MarketplacePage() {
                   <p className="text-xs text-foreground/40 font-mono break-all mb-2">
                     {agent.address}
                   </p>
+                  {agent.paymentMode === 'permissionless' && agent.agentWalletAddress && (
+                    <div className="text-xs text-purple-600 mb-1">
+                      Wallet: {agent.agentWalletAddress.substring(0, 16)}...
+                    </div>
+                  )}
                 </div>
 
                 {/* Stats */}
@@ -154,7 +233,11 @@ export default function MarketplacePage() {
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-foreground/60" />
                     <span className="text-sm text-foreground/60">Trust Score:</span>
-                    <span className="text-sm font-semibold">{agent.trustScore}</span>
+                    {trustScores.has(agent.address) ? (
+                      <span className="text-sm font-semibold">{trustScores.get(agent.address)?.final || trustScores.get(agent.address)?.hybrid || agent.trustScore}</span>
+                    ) : (
+                      <span className="text-sm font-semibold">{agent.trustScore}</span>
+                    )}
                   </div>
 
                   {/* Registered Date */}

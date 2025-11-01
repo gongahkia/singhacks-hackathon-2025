@@ -58,10 +58,12 @@ class PaymentService {
       // Verify agent is registered
       const agentService = require('./agent-service');
       try {
+        console.log(`[payment-service] Verifying agent: ${payerAgentAddress}`);
         const agent = await agentService.getAgent(payerAgentAddress);
         if (!agent || !agent.isActive) {
           throw new Error(`Agent ${payerAgentAddress} is not registered or inactive`);
         }
+        console.log(`[payment-service] Agent verified: ${agent.name || agent.address}, active: ${agent.isActive}`);
         payerAddress = payerAgentAddress;
         
         // Create wallet from payer's private key
@@ -71,19 +73,24 @@ class PaymentService {
           privateKey = '0x' + privateKey;
         }
         walletToUse = new ethers.Wallet(privateKey, this.provider);
+        console.log(`[payment-service] Wallet created from private key, address: ${walletToUse.address}`);
         
         // Verify wallet address matches agent address
         if (walletToUse.address.toLowerCase() !== payerAgentAddress.toLowerCase()) {
           throw new Error(`Private key does not match agent address. Expected ${payerAgentAddress}, got ${walletToUse.address}`);
         }
+        console.log(`[payment-service] Wallet address matches agent address ✓`);
 
         // Create contract instance with payer's wallet
         const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
         if (!address || address === '0x0000000000000000000000000000000000000000') {
           throw new Error('PaymentProcessor address not configured');
         }
+        console.log(`[payment-service] PaymentProcessor address: ${address}`);
         contractToUse = new ethers.Contract(address, PaymentProcessorABI, walletToUse);
+        console.log(`[payment-service] Contract instance created with agent wallet`);
       } catch (error) {
+        console.error(`[payment-service] Error setting up agent wallet:`, error.message);
         if (error.message.includes('Agent') || error.message.includes('not found')) {
           throw new Error(`Cannot create payment: ${error.message}. Ensure agent is registered via /api/agents`);
         }
@@ -132,10 +139,40 @@ class PaymentService {
 
     // Convert HBAR to wei (18 decimals for EVM)
     const amount = ethers.parseEther(amountInHbar.toString());
+    console.log(`[payment-service] Creating escrow: payee=${payee}, amount=${amountInHbar} HBAR (${amount} wei), description=${description}`);
+    console.log(`[payment-service] Payer address: ${payerAddress}, has balance: checking...`);
+    
+    // Check balance before creating escrow
+    try {
+      const balance = await this.provider.getBalance(payerAddress);
+      console.log(`[payment-service] Payer balance: ${ethers.formatEther(balance)} HBAR`);
+      if (balance < amount) {
+        throw new Error(`Insufficient balance. Required: ${ethers.formatEther(amount)} HBAR, Available: ${ethers.formatEther(balance)} HBAR`);
+      }
+    } catch (balanceError) {
+      console.error(`[payment-service] Balance check failed:`, balanceError.message);
+      throw balanceError;
+    }
+    
     // Contract signature: createEscrow(address _payee, string _serviceDescription, uint256 _expirationDays)
     // expirationDays: 0 = use default (30 days)
-    const tx = await contractToUse.createEscrow(payee, description, expirationDays, { value: amount });
-    const receipt = await tx.wait();
+    console.log(`[payment-service] Calling contract.createEscrow()...`);
+    let tx, receipt;
+    try {
+      tx = await contractToUse.createEscrow(payee, description, expirationDays, { value: amount });
+      console.log(`[payment-service] Transaction sent: ${tx.hash}`);
+      receipt = await tx.wait();
+      console.log(`[payment-service] Transaction confirmed in block: ${receipt.blockNumber}`);
+    } catch (txError) {
+      console.error(`[payment-service] Transaction failed:`, txError.message);
+      console.error(`[payment-service] Error details:`, {
+        code: txError.code,
+        reason: txError.reason,
+        data: txError.data,
+        transaction: txError.transaction
+      });
+      throw txError;
+    }
 
     let escrowId = undefined;
     try {
@@ -274,6 +311,109 @@ class PaymentService {
     this.ensureContract();
     const ids = await this.paymentProcessor.getPayerEscrows(payerAddress);
     return Promise.all(ids.map(id => this.getEscrow(id)));
+  }
+
+  /**
+   * Create token escrow (for USDC and other HTS tokens)
+   * @param {string} tokenId - Hedera token ID (e.g., 0.0.429274 for USDC)
+   * @param {string} payee - Recipient agent address
+   * @param {number|string} amount - Token amount
+   * @param {string} description - Service description
+   * @param {string} payerAgentAddress - Payer agent address
+   * @param {string} payerPrivateKey - Payer's private key
+   * @returns {Promise<Object>} Token escrow creation result
+   */
+  async createTokenEscrow(tokenId, payee, amount, description, payerAgentAddress, payerPrivateKey) {
+    const tokenService = require('./token-service');
+    const agentService = require('./agent-service');
+    
+    // Verify payer is registered agent
+    const agent = await agentService.getAgent(payerAgentAddress);
+    if (!agent || !agent.isActive) {
+      throw new Error('Payer must be a registered agent');
+    }
+    
+    // Associate token if not already associated
+    try {
+      await tokenService.associateToken(payerAgentAddress, payerPrivateKey, tokenId);
+      console.log(`✅ Token ${tokenId} associated with ${payerAgentAddress}`);
+    } catch (error) {
+      // Already associated or association failed - continue anyway
+      console.log('Token association skipped:', error.message);
+    }
+    
+    // For now, transfer tokens directly (simplified escrow)
+    // In production, you'd transfer to an escrow contract
+    const escrowAccountId = process.env.ESCROW_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID;
+    
+    const result = await tokenService.transferToken(
+      tokenId,
+      payerAgentAddress,
+      payerPrivateKey,
+      escrowAccountId,
+      parseInt(amount)
+    );
+    
+    // Generate escrow ID
+    const escrowId = `token-escrow-${tokenId}-${Date.now()}`;
+    
+    // HCS logging
+    const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
+    await hederaClient.submitMessage(paymentTopicId, JSON.stringify({
+      event: 'TokenEscrowCreated',
+      escrowId,
+      tokenId,
+      payer: payerAgentAddress,
+      payee,
+      amount,
+      description,
+      status: result.status,
+      timestamp: new Date().toISOString()
+    }));
+    
+    return {
+      success: true,
+      escrowId,
+      tokenId,
+      amount,
+      status: result.status
+    };
+  }
+
+  /**
+   * Create multi-currency escrow (HBAR or USDC)
+   * @param {string} currency - Currency type ('HBAR' or 'USDC')
+   * @param {string} payee - Recipient address
+   * @param {number|string} amount - Amount
+   * @param {string} description - Service description
+   * @param {string} payer - Payer agent address
+   * @param {string} payerPrivateKey - Payer's private key
+   * @returns {Promise<Object>} Escrow creation result
+   */
+  async createMultiCurrencyEscrow(currency, payee, amount, description, payer, payerPrivateKey) {
+    const SUPPORTED_TOKENS = {
+      USDC: process.env.USDC_TOKEN_ID || '0.0.429274',
+      HBAR: 'native'
+    };
+    
+    if (currency === 'HBAR' || currency === 'native' || !currency) {
+      // Use existing HBAR escrow
+      return await this.createEscrow(payee, amount, description, payer, payerPrivateKey);
+    }
+    
+    if (currency === 'USDC') {
+      // Create token escrow
+      return await this.createTokenEscrow(
+        SUPPORTED_TOKENS.USDC,
+        payee,
+        amount,
+        description,
+        payer,
+        payerPrivateKey
+      );
+    }
+    
+    throw new Error(`Unsupported currency: ${currency}. Supported: HBAR, USDC`);
   }
 }
 

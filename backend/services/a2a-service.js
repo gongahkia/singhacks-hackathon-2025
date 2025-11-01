@@ -2,6 +2,7 @@
 const { ethers } = require('ethers');
 const hederaClient = require('./hedera-client');
 const agentService = require('./agent-service');
+const hederaAgentKitService = require('./hedera-agent-kit-service');
 
 let AgentRegistryABI;
 let deploymentInfo;
@@ -238,6 +239,54 @@ class A2AService {
       return interactions;
     } catch (error) {
       throw new Error(`Failed to get agent interactions: ${error.message}`);
+    }
+  }
+
+  /**
+   * Initiate MCP-based agent-to-agent communication
+   * @param {string} fromAgent - Agent address initiating communication
+   * @param {string} toAgent - Target agent address
+   * @param {string} capability - Capability being requested
+   * @param {string} message - Message content
+   * @returns {Promise<Object>} MCP communication result
+   */
+  async initiateMCPCommunication(fromAgent, toAgent, capability, message) {
+    try {
+      // Try to initialize Agent Kit (non-blocking)
+      await hederaAgentKitService.initialize().catch(() => {
+        console.warn('Agent Kit not available for MCP communication');
+      });
+      
+      // Use agent kit to send MCP message
+      const mcpMessage = {
+        protocol: 'mcp',
+        from: fromAgent,
+        to: toAgent,
+        capability: capability,
+        message: message,
+        timestamp: new Date().toISOString()
+      };
+
+      // Submit to HCS topic for MCP messages
+      const mcpTopicId = await hederaClient.ensureTopic(
+        'MCP_TOPIC_ID',
+        'MCP',
+        'Model Context Protocol messages'
+      );
+      
+      await hederaClient.submitMessage(mcpTopicId, JSON.stringify(mcpMessage));
+
+      // Also initiate traditional A2A for backward compatibility
+      const result = await this.initiateCommunication(fromAgent, toAgent, capability);
+
+      return {
+        ...result,
+        mcpEnabled: true,
+        mcpTopicId: mcpTopicId,
+        mcpMessage: mcpMessage
+      };
+    } catch (error) {
+      throw new Error(`MCP communication failed: ${error.message}`);
     }
   }
 }

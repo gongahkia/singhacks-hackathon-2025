@@ -34,14 +34,14 @@ class ConfigService {
         }
       });
 
-      // Reinitialize Gemini service if API key was updated
-      if (newConfig.GEMINI_API_KEY || newConfig.GEMINI_API_URL) {
+      // Reinitialize Groq service if API key was updated
+      if (newConfig.GROQ_API_KEY) {
         try {
-          const geminiService = require('./gemini-service');
-          geminiService.reinitialize();
-          console.log('✅ Gemini service reinitialized after config update');
+          const groqService = require('./groq-service');
+          groqService.reinitialize();
+          console.log('✅ Groq service reinitialized after config update');
         } catch (err) {
-          console.warn('⚠️  Could not reinitialize Gemini service:', err.message);
+          console.warn('⚠️  Could not reinitialize Groq service:', err.message);
         }
       }
 

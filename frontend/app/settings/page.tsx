@@ -1,49 +1,38 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { useAccount, useSignMessage } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { apiClient } from '../../src/lib/api-client'
 import Link from 'next/link'
+import { ProtocolBadge, ProtocolInfoPanel } from '@/components/protocol-badge'
 
 export default function SettingsPage() {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Connect agent state
-  const [accountId, setAccountId] = useState('')
-  const [evmAddress, setEvmAddress] = useState('')
-  const [agentName, setAgentName] = useState('')
-  const [capability, setCapability] = useState('')
-  const [signature, setSignature] = useState('')
-  const [connectError, setConnectError] = useState<string | null>(null)
-  const [connectResult, setConnectResult] = useState<any | null>(null)
-
   // Wallet connection using wagmi
   const { address: walletAddress, isConnected: walletConnected } = useAccount()
-  const { signMessageAsync } = useSignMessage()
 
-  // Gemini settings
-  const [geminiKey, setGeminiKey] = useState('')
-  const [geminiUrl, setGeminiUrl] = useState('')
+  // Groq AI settings
+  const [groqKey, setGroqKey] = useState('')
   const [settingsSaveMsg, setSettingsSaveMsg] = useState<string | null>(null)
   // Registered agent for chat
   const [registeredAgentName, setRegisteredAgentName] = useState('')
   const [agentSavedMsg, setAgentSavedMsg] = useState<string | null>(null)
+  
+  // Wallet connection status
+  const [connectedAgents, setConnectedAgents] = useState<any[]>([])
+  const [loadingConnections, setLoadingConnections] = useState(false)
 
   useEffect(() => {
-    // Load current masked Gemini API settings on mount
+    // Load current masked Groq API settings on mount
     apiClient.getSettings().then((res) => {
       if (res && res.config) {
         // Don't set masked values in the input - keep them empty so user knows to enter new key
         // Only set non-masked values
-        const apiKey = res.config.GEMINI_API_KEY || ''
-        const apiUrl = res.config.GEMINI_API_URL || ''
+        const apiKey = res.config.GROQ_API_KEY || ''
 
         // Check if API key is masked (contains "..." or is masked format)
         if (!apiKey.includes('...')) {
-          setGeminiKey(apiKey)
+          setGroqKey(apiKey)
         }
-        setGeminiUrl(apiUrl)
       }
     }).catch(() => {})
 
@@ -52,54 +41,33 @@ export default function SettingsPage() {
       const stored = typeof window !== 'undefined' ? window.localStorage.getItem('heracles.registeredAgentName') : null
       if (stored) setRegisteredAgentName(stored)
     } catch {}
-  }, [])
 
-  const onConnect = async () => {
-    setConnectError(null)
-    setConnectResult(null)
-    try {
-      if (!signature) throw new Error('Provide a signature from your wallet to verify')
-
-      const messageObject = {
-        action: 'registerAgent',
-        name: agentName || undefined,
-        capabilities: capability ? [capability] : [],
-        timestamp: new Date().toISOString()
-      }
-
-      const result = await apiClient.verifySignature({ accountId, evmAddress, message: messageObject, signature })
-      setConnectResult(result)
-    } catch (e: any) {
-      setConnectError(e.message)
+    // Load wallet connections if wallet is connected
+    if (walletConnected && walletAddress) {
+      fetchWalletConnections()
     }
-  }
+  }, [walletConnected, walletAddress])
 
-  // Auto-fill EVM address when wallet connects
-  useEffect(() => {
-    if (walletAddress && !evmAddress) {
-      setEvmAddress(walletAddress)
-    }
-  }, [walletAddress, evmAddress])
-
-  // Helper to sign message for agent registration
-  const signMessageForRegistration = async () => {
-    if (!walletAddress) {
-      throw new Error('Please connect your wallet first')
-    }
+  const fetchWalletConnections = async () => {
+    if (!walletAddress) return
     
-    const messageObject = {
-      action: 'registerAgent',
-      name: agentName || undefined,
-      capabilities: capability ? [capability] : [],
-      timestamp: new Date().toISOString(),
-      address: walletAddress,
+    setLoadingConnections(true)
+    try {
+      const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const res = await fetch(`${BASE_URL}/api/agent-connection/user/${walletAddress}`)
+      if (res.ok) {
+        const data = await res.json()
+        setConnectedAgents([data])
+      } else {
+        setConnectedAgents([])
+      }
+    } catch (error) {
+      setConnectedAgents([])
+    } finally {
+      setLoadingConnections(false)
     }
-
-    const message = JSON.stringify(messageObject)
-    const signature = await signMessageAsync({ message })
-    setSignature(signature)
-    return signature
   }
+
 
   return (
     <main className="min-h-screen">
@@ -109,109 +77,121 @@ export default function SettingsPage() {
         <div className="mb-12">
           <h1 className="text-5xl font-bold mb-2">Settings</h1>
           <p className="text-foreground/60">
-            Configure your connection to the Hedera blockchain network and register your AI agent. You'll need a Hedera account, wallet, and Gemini API key to get started.
+            Configure your connection to the Hedera blockchain network and register your AI agent. You'll need a Hedera account, wallet, and Groq API key to get started.
           </p>
         </div>
 
         <div className="space-y-8">
-          {/* Register/Link Hedera Agent Section */}
+          {/* Wallet Connection Status */}
           <section className="border border-border p-8 space-y-6">
             <div>
-              <h2 className="text-lg font-semibold mb-2">Register/Link Your Hedera Agent</h2>
+              <h2 className="text-lg font-semibold mb-2">Wallet Connection Status</h2>
               <p className="text-sm text-foreground/60">
-                Connect your Hedera Agent to gain access to the Hedera network.
+                View your connected wallet and agents associated with it.
               </p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
-              <input
-                className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Hedera Account ID (0.0.x)"
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-              />
-              <input
-                className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="EVM Address (0x...)"
-                value={evmAddress}
-                onChange={(e) => setEvmAddress(e.target.value)}
-                disabled={!!walletAddress}
-              />
-              <input
-                className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Agent Name (Optional)"
-                value={agentName}
-                onChange={(e) => setAgentName(e.target.value)}
-              />
-              <input
-                className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Capability (Optional description)"
-                value={capability}
-                onChange={(e) => setCapability(e.target.value)}
-              />
-              <input
-                className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Signature (will be generated when you click 'Sign & Verify')"
-                value={signature}
-                onChange={(e) => setSignature(e.target.value)}
-                readOnly
-              />
-            </div>
-
-            <div className="flex gap-3">
-              {!signature && walletConnected && (
-                <button
-                  className="px-6 py-3 bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
-                  onClick={async () => {
-                    try {
-                      setConnectError(null)
-                      await signMessageForRegistration()
-                    } catch (e: any) {
-                      setConnectError(e.message)
-                    }
-                  }}
-                >
-                  Sign & Verify
-                </button>
-              )}
-              {signature && (
-                <button
-                  className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors"
-                  onClick={onConnect}
-                >
-                  Verify Signature
-                </button>
-              )}
-              {!walletConnected && (
-                <div className="text-sm text-foreground/60">
-                  Connect your wallet to sign messages
+            
+            {walletConnected && walletAddress ? (
+              <div className="space-y-4">
+                <div className="p-4 border border-border bg-foreground/5 rounded">
+                  <div className="text-sm text-foreground/60 mb-1">Connected Wallet</div>
+                  <div className="font-mono text-sm break-all">{walletAddress}</div>
                 </div>
-              )}
-              {connectResult && (
-                <Link
-                  href="/marketplace"
-                  className="px-6 py-3 border border-border hover:bg-accent transition-colors font-medium"
-                >
-                  Browse Marketplace
-                </Link>
-              )}
-            </div>
-
-            {connectError && (
-              <div className="p-4 border border-red-200 bg-red-50 text-red-800 text-sm">
-                Error: {connectError}
+                
+                {loadingConnections ? (
+                  <div className="text-sm text-foreground/60">Loading connected agents...</div>
+                ) : connectedAgents.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium mb-2">Connected Agents:</div>
+                    {connectedAgents.map((conn, idx) => (
+                      <div key={idx} className="p-4 border border-border bg-green-50 dark:bg-green-950 rounded">
+                        <div className="text-sm font-medium">{conn.agent?.name || 'Unknown Agent'}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Agent ID: <span className="font-mono">{conn.agentId}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Connected: {new Date(conn.connectedAt).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-foreground/60">
+                    No agents connected to this wallet. Visit the marketplace to connect your wallet to an agent.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-foreground/60">
+                Connect your wallet to view connection status.
               </div>
             )}
-            {connectResult && (
-              <div className="space-y-2">
-                <div className="p-4 border border-green-200 bg-green-50 text-green-800 text-sm font-medium">
-                  Successfully verified! Your wallet is now linked to the network.
-                </div>
-                <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
-                  {JSON.stringify(connectResult, null, 2)}
-                </pre>
+          </section>
+
+          {/* Quick Links Section */}
+          <section className="border border-border p-8 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Quick Links</h2>
+              <p className="text-sm text-foreground/60">
+                Access key pages and features.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Link
+                href="/marketplace"
+                className="p-4 border border-border hover:bg-accent transition-colors rounded"
+              >
+                <div className="font-medium mb-1">Marketplace</div>
+                <div className="text-sm text-foreground/60">Browse and discover AI agents</div>
+              </Link>
+              <Link
+                href="/deploy-agent"
+                className="p-4 border border-border hover:bg-accent transition-colors rounded"
+              >
+                <div className="font-medium mb-1">Deploy Agent</div>
+                <div className="text-sm text-foreground/60">Register a new AI agent</div>
+              </Link>
+              <Link
+                href="/chat"
+                className="p-4 border border-border hover:bg-accent transition-colors rounded"
+              >
+                <div className="font-medium mb-1">Chat</div>
+                <div className="text-sm text-foreground/60">AI-powered agent assistant</div>
+              </Link>
+            </div>
+          </section>
+
+          {/* Protocol Information */}
+          <section className="border border-border p-8 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Protocol Information</h2>
+              <p className="text-sm text-foreground/60">
+                Information about the protocols used in this platform.
+              </p>
+            </div>
+            <ProtocolInfoPanel />
+            <div className="text-sm text-foreground/60 space-y-2">
+              <div>
+                <strong>ERC-8004:</strong> Official Identity & Reputation Registry on Hedera Testnet
               </div>
-            )}
+              <div>
+                <strong>Contract Address:</strong>{' '}
+                <a 
+                  href="https://hashscan.io/testnet/address/0x4c74ebd72921d537159ed2053f46c12a7d8e5923" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline"
+                >
+                  0x4c74ebd72921d537159ed2053f46c12a7d8e5923
+                </a>
+              </div>
+              <div>
+                <strong>x402 Protocol:</strong> Micropayment Standard via hosted facilitator
+              </div>
+              <div>
+                <strong>Hybrid Trust:</strong> Combines custom metrics (60%) with ERC-8004 reputation (40%)
+              </div>
+            </div>
           </section>
 
           {/* Registered Agent for Chat */}
@@ -250,28 +230,21 @@ export default function SettingsPage() {
             {agentSavedMsg && <div className="text-sm text-foreground/70">{agentSavedMsg}</div>}
           </section>
 
-          {/* Gemini API Key Section */}
+          {/* Groq AI API Key Section */}
           <section className="border border-border p-8 space-y-6">
             <div>
-              <h2 className="text-lg font-semibold mb-2">Gemini / Generative AI</h2>
+              <h2 className="text-lg font-semibold mb-2">Groq AI (Ultra-Fast LLM)</h2>
               <p className="text-sm text-foreground/60">
-                Add your Gemini (Generative AI) API key so the chat agent can generate responses. The key is stored server-side and masked in the UI.
+                Add your Groq API key for ultra-fast AI agent discovery and natural language search. The key is stored server-side and masked in the UI. Get a free API key at <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">console.groq.com</a>.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+            <div className="max-w-3xl">
               <input
-                className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter your Gemini API key (AIza...)"
-                value={geminiKey}
-                onChange={(e) => setGeminiKey(e.target.value)}
-              />
-
-              <input
-                className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="GEMINI_API_URL (optional, leave empty for default)"
-                value={geminiUrl}
-                onChange={(e) => setGeminiUrl(e.target.value)}
+                className="w-full px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Enter your Groq API key (gsk_...)"
+                value={groqKey}
+                onChange={(e) => setGroqKey(e.target.value)}
               />
             </div>
 
@@ -283,11 +256,8 @@ export default function SettingsPage() {
                     setSettingsSaveMsg(null)
                     // Only send non-empty values to avoid overwriting with empty strings
                     const updateData: Record<string, string> = {}
-                    if (geminiKey && geminiKey.trim()) {
-                      updateData.GEMINI_API_KEY = geminiKey.trim()
-                    }
-                    if (geminiUrl !== undefined) {
-                      updateData.GEMINI_API_URL = geminiUrl.trim()
+                    if (groqKey && groqKey.trim()) {
+                      updateData.GROQ_API_KEY = groqKey.trim()
                     }
                     await apiClient.updateSettings(updateData)
                     setSettingsSaveMsg('Saved successfully!')
@@ -296,7 +266,7 @@ export default function SettingsPage() {
                   }
                 }}
               >
-                Save Gemini Settings
+                Save Groq Settings
               </button>
               {settingsSaveMsg && (
                 <div className="px-4 py-3 text-sm">{settingsSaveMsg}</div>

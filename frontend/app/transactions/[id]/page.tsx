@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { findAgentTransaction, AgentTxRecord } from '@/lib/tx-store'
+import { TransactionTimeline } from '@/components/transaction-timeline'
 
 function BlockViz({ tx }: { tx: AgentTxRecord }) {
   // Simulate last 6 blocks and place the tx into the 3rd from last
@@ -88,6 +89,12 @@ export default function TxDetailsPage() {
                 <div className="text-sm text-foreground/60">Timestamp</div>
                 <div className="text-sm">{new Date(tx.timestamp).toLocaleString()}</div>
               </div>
+            </div>
+
+            {/* Transaction Timeline */}
+            <div className="border border-border p-6 space-y-4">
+              <h2 className="text-lg font-semibold">Transaction Timeline</h2>
+              <TransactionTimeline transactionId={tx.txHash || tx.escrowId || tx.id} type="a2a-payment" />
             </div>
 
             {/* Blockchain proof */}
