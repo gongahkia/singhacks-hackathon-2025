@@ -32,8 +32,16 @@ export default function SettingsPage() {
     // Load current masked Gemini API settings on mount
     apiClient.getSettings().then((res) => {
       if (res && res.config) {
-        setGeminiKey(res.config.GEMINI_API_KEY || '')
-        setGeminiUrl(res.config.GEMINI_API_URL || '')
+        // Don't set masked values in the input - keep them empty so user knows to enter new key
+        // Only set non-masked values
+        const apiKey = res.config.GEMINI_API_KEY || ''
+        const apiUrl = res.config.GEMINI_API_URL || ''
+
+        // Check if API key is masked (contains "..." or is masked format)
+        if (!apiKey.includes('...')) {
+          setGeminiKey(apiKey)
+        }
+        setGeminiUrl(apiUrl)
       }
     }).catch(() => {})
   }, [])
@@ -211,14 +219,14 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
               <input
                 className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="GEMINI_API_KEY"
+                placeholder="Enter your Gemini API key (AIza...)"
                 value={geminiKey}
                 onChange={(e) => setGeminiKey(e.target.value)}
               />
 
               <input
                 className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="GEMINI_API_URL (optional)"
+                placeholder="GEMINI_API_URL (optional, leave empty for default)"
                 value={geminiUrl}
                 onChange={(e) => setGeminiUrl(e.target.value)}
               />
@@ -230,8 +238,16 @@ export default function SettingsPage() {
                 onClick={async () => {
                   try {
                     setSettingsSaveMsg(null)
-                    await apiClient.updateSettings({ GEMINI_API_KEY: geminiKey, GEMINI_API_URL: geminiUrl })
-                    setSettingsSaveMsg('Saved')
+                    // Only send non-empty values to avoid overwriting with empty strings
+                    const updateData: Record<string, string> = {}
+                    if (geminiKey && geminiKey.trim()) {
+                      updateData.GEMINI_API_KEY = geminiKey.trim()
+                    }
+                    if (geminiUrl !== undefined) {
+                      updateData.GEMINI_API_URL = geminiUrl.trim()
+                    }
+                    await apiClient.updateSettings(updateData)
+                    setSettingsSaveMsg('Saved successfully!')
                   } catch (e: any) {
                     setSettingsSaveMsg('Save failed: ' + (e.message || e))
                   }

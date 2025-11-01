@@ -45,7 +45,8 @@ export default function ChatPage() {
 
     try {
       // Send user input to backend chat API
-      const resp = await fetch('/api/gemini/chat', {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const resp = await fetch(`${backendUrl}/api/gemini/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input: input.trim() })
@@ -183,7 +184,8 @@ export default function ChatPage() {
                 description={assistantAction.payload.description || assistantAction.payload.purpose}
                 onSendClick={async () => {
                   try {
-                    const pResp = await fetch('/api/payments', {
+                    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                    const pResp = await fetch(`${backendUrl}/api/payments`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({

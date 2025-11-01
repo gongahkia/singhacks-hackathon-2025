@@ -16,6 +16,7 @@ const authRoutes = require('./routes/auth');
 const a2aRoutes = require('./routes/a2a');
 const reputationRoutes = require('./routes/reputation');
 const settingsRoutes = require('./routes/settings');
+const geminiRoutes = require('./routes/gemini');
 const errorHandler = require('./utils/error-handler');
 const { version } = require('./package.json');
 
@@ -43,6 +44,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/a2a', a2aRoutes);
 app.use('/api/reputation', reputationRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/gemini', geminiRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
