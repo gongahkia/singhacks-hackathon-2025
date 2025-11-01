@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { apiClient } from './lib/api-client'
 import { getAgentTransactions, AgentTxRecord } from '../lib/tx-store'
+import { NetworkStatus } from '../components/network-status'
 import Link from 'next/link'
 
 type Health = { status: string; timestamp: string; network?: string; version?: string }
@@ -22,10 +23,15 @@ export default function App() {
   const [agents, setAgents] = useState<any[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingAgents, setLoadingAgents] = useState(true)
+  const [loadingHealth, setLoadingHealth] = useState(true)
   const [transactions, setTransactions] = useState<Transaction[]>([])
 
   useEffect(() => {
-    apiClient.healthCheck().then(setHealth).catch((e: any) => setError(e.message))
+    setLoadingHealth(true)
+    apiClient.healthCheck()
+      .then(setHealth)
+      .catch((e: any) => setError(e.message))
+      .finally(() => setLoadingHealth(false))
     loadAgents()
     hydrateTransactions()
     const onNewTx = () => hydrateTransactions()
@@ -72,20 +78,8 @@ export default function App() {
         </div>
 
         <div className="space-y-8">
-          {/* Backend Health Section */}
-          <section className="border border-border p-8 space-y-4">
-            <h2 className="text-lg font-semibold">Network Status</h2>
-            <p className="text-sm text-foreground/60">Check the connection to the Hedera blockchain network. This shows which network you're connected to (testnet or mainnet) and the current system status.</p>
-            {health ? (
-              <div className="space-y-4">
-                <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
-{JSON.stringify(health, null, 2)}
-                </pre>
-              </div>
-            ) : (
-              <p className="text-foreground/60">Loading network status...</p>
-            )}
-          </section>
+          {/* Network Status Section */}
+          <NetworkStatus health={health} loading={loadingHealth} error={error} />
 
           {/* Agents Section */}
           <section className="border border-border p-8 space-y-4">
