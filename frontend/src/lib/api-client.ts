@@ -38,5 +38,28 @@ export const apiClient = {
       throw new Error(msg)
     }
     return data
+  },
+  async getSettingsSchema() {
+    const res = await fetch(url('/api/settings/schema'))
+    if (!res.ok) throw new Error('Failed to fetch settings schema')
+    return res.json()
+  },
+  async getSettings() {
+    const res = await fetch(url('/api/settings'))
+    if (!res.ok) throw new Error('Failed to fetch settings')
+    return res.json()
+  },
+  async updateSettings(config: Record<string, string>) {
+    const res = await fetch(url('/api/settings'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      const msg = (data && (data.error || data.message)) || 'Failed to update settings'
+      throw new Error(msg)
+    }
+    return res.json()
   }
 }

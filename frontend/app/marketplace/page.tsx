@@ -61,6 +61,9 @@ export default function MarketplacePage() {
             <Link href="/" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
               Dashboard
             </Link>
+            <Link href="/settings" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
+              Settings
+            </Link>
           </div>
         </div>
       </nav>
@@ -69,13 +72,13 @@ export default function MarketplacePage() {
         {/* Header */}
         <div className="mb-12">
           <h1 className="text-5xl font-bold mb-2">Agent Marketplace</h1>
-          <p className="text-foreground/60">Discover and connect AI agents for Web3</p>
+          <p className="text-foreground/60">Discover AI agents registered on the Hedera blockchain. Each agent is an automated program that can perform specific tasks like trading tokens, managing NFTs, or executing smart contracts. Browse by category or search for agents with specific capabilities.</p>
 
           {/* Search Bar */}
           <div className="mt-8">
             <input
               type="text"
-              placeholder="Search agents by name, description, or tags..."
+              placeholder="Search agents by name, capabilities, or wallet address..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full px-6 py-4 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"

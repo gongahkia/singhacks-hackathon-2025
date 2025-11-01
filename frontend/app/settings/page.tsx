@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { apiClient } from '../../src/lib/api-client'
 import Link from 'next/link'
 
@@ -23,9 +23,25 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
+  // Connect agent state
+  const [accountId, setAccountId] = useState('')
+  const [evmAddress, setEvmAddress] = useState('')
+  const [agentName, setAgentName] = useState('')
+  const [capability, setCapability] = useState('')
+  const [signature, setSignature] = useState('')
+  const [connectError, setConnectError] = useState<string | null>(null)
+  const [connectResult, setConnectResult] = useState<any | null>(null)
+
   useEffect(() => {
     loadSettings()
   }, [])
+
+  const messageObject = useMemo(() => ({
+    action: 'registerAgent',
+    name: agentName || undefined,
+    capabilities: capability ? [capability] : [],
+    timestamp: new Date().toISOString()
+  }), [agentName, capability])
 
   const loadSettings = async () => {
     setLoading(true)
@@ -80,6 +96,18 @@ export default function SettingsPage() {
     setFormValues((prev) => ({ ...prev, [key]: value }))
   }
 
+  const onConnect = async () => {
+    setConnectError(null)
+    setConnectResult(null)
+    try {
+      if (!signature) throw new Error('Provide a signature from your wallet to verify')
+      const result = await apiClient.verifySignature({ accountId, evmAddress, message: messageObject, signature })
+      setConnectResult(result)
+    } catch (e: any) {
+      setConnectError(e.message)
+    }
+  }
+
   return (
     <main className="min-h-screen">
       {/* Top navigation bar */}
@@ -109,7 +137,7 @@ export default function SettingsPage() {
         <div className="mb-12">
           <h1 className="text-5xl font-bold mb-2">Settings</h1>
           <p className="text-foreground/60">
-            Configure your environment variables for the Hedera Agent Economy backend
+            Configure your connection to the Hedera blockchain network and register your AI agent. You'll need a Hedera account and wallet to get started.
           </p>
         </div>
 
@@ -134,10 +162,9 @@ export default function SettingsPage() {
             {/* Settings Form */}
             <section className="border border-border p-8 space-y-6">
               <div>
-                <h2 className="text-lg font-semibold mb-2">Configuration</h2>
+                <h2 className="text-lg font-semibold mb-2">Blockchain Configuration</h2>
                 <p className="text-sm text-foreground/60">
-                  Enter your configuration values below. Sensitive values (like private keys) will be
-                  masked in the display.
+                  Enter your Hedera account credentials and API keys. These settings allow the backend to interact with the Hedera blockchain on your behalf. Private keys are encrypted and never shown in plain text.
                 </p>
               </div>
 
@@ -202,6 +229,90 @@ export default function SettingsPage() {
               <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
 {JSON.stringify(config, null, 2)}
               </pre>
+            </section>
+
+            {/* Connect Agent Section */}
+            <section className="border border-border p-8 space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold mb-2">Register Your AI Agent</h2>
+                <p className="text-sm text-foreground/60">
+                  To register your AI agent on the Hedera network, you need to prove you own a wallet by signing a message. This is like showing an ID - it confirms you have the private key to your wallet without revealing it. Fill in your Hedera Account ID (looks like 0.0.12345), your EVM wallet address (starts with 0x), give your agent a name, and describe what it can do. Then sign the message with your wallet and paste the signature below.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+                <input
+                  className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Hedera Account ID (0.0.x)"
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                />
+                <input
+                  className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="EVM Address (0x...)"
+                  value={evmAddress}
+                  onChange={(e) => setEvmAddress(e.target.value)}
+                />
+                <input
+                  className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Agent Name"
+                  value={agentName}
+                  onChange={(e) => setAgentName(e.target.value)}
+                />
+                <input
+                  className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Capability (e.g., smart-contracts)"
+                  value={capability}
+                  onChange={(e) => setCapability(e.target.value)}
+                />
+                <textarea
+                  className="md:col-span-2 px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  placeholder="Wallet Signature (0x...)"
+                  value={signature}
+                  onChange={(e) => setSignature(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold mb-2">Message to Sign</div>
+                <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
+{JSON.stringify(messageObject, null, 2)}
+                </pre>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors"
+                  onClick={onConnect}
+                >
+                  Verify Signature
+                </button>
+                {connectResult && (
+                  <Link
+                    href="/marketplace"
+                    className="px-6 py-3 border border-border hover:bg-accent transition-colors font-medium"
+                  >
+                    Browse Marketplace
+                  </Link>
+                )}
+              </div>
+
+              {connectError && (
+                <div className="p-4 border border-red-200 bg-red-50 text-red-800 text-sm">
+                  Error: {connectError}
+                </div>
+              )}
+              {connectResult && (
+                <div className="space-y-2">
+                  <div className="p-4 border border-green-200 bg-green-50 text-green-800 text-sm font-medium">
+                    Successfully verified! You're now connected to the network.
+                  </div>
+                  <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
+{JSON.stringify(connectResult, null, 2)}
+                  </pre>
+                </div>
+              )}
             </section>
           </div>
         )}
