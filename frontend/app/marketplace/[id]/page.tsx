@@ -21,16 +21,33 @@ export default function AgentDetailPage({ params }: PageProps) {
 
   if (!agent) {
     return (
-      <main className="min-h-screen p-12 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold mb-4">Agent Not Found</h1>
-          <p className="text-foreground/60 mb-8">The agent you're looking for doesn't exist.</p>
-          <Link
-            href="/marketplace"
-            className="px-6 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors inline-block"
-          >
-            Back to Marketplace
-          </Link>
+      <main className="min-h-screen">
+        {/* Top navigation bar */}
+        <nav className="border-b border-border px-12 py-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Hedera Agent Economy</h2>
+            <div className="flex gap-3">
+              <Link href="/" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
+                Dashboard
+              </Link>
+              <Link href="/marketplace" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
+                Marketplace
+              </Link>
+            </div>
+          </div>
+        </nav>
+
+        <div className="p-12 flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold mb-4">Agent Not Found</h1>
+            <p className="text-foreground/60 mb-8">The agent you're looking for doesn't exist.</p>
+            <Link
+              href="/marketplace"
+              className="px-6 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors inline-block"
+            >
+              Back to Marketplace
+            </Link>
+          </div>
         </div>
       </main>
     )
