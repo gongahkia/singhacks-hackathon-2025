@@ -13,7 +13,7 @@ router.post('/challenge', async (req, res) => {
       asset: 'HBAR',
       amount: amountHbar,
       memo: memo || 'x402-payment',
-      payTo: hederaClient.accountId.toString(),
+      payTo: process.env.HEDERA_ACCOUNT_ID || '0.0.0',
     }
   };
   res.status(402).json(challenge);
