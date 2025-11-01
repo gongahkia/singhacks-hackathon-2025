@@ -102,7 +102,7 @@ export default function App() {
       </section>
 
       <small style={{ color: '#666' }}>
-        API base: {import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL : '(proxy /api)'}
+        API base: {(() => { try { return (import.meta as any)?.env?.VITE_API_URL || '(proxy /api)' } catch { return '(proxy /api)' } })()}
       </small>
     </div>
   )

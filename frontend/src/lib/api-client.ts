@@ -1,11 +1,17 @@
 // Frontend API client - avoids hardcoded URLs
-// Uses relative /api paths with Vite proxy in dev, or VITE_API_URL when provided
+// Supports both Vite (VITE_API_URL) and Next.js (NEXT_PUBLIC_API_URL). Falls back to relative /api.
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+let VITE_API_URL = ''
+try {
+  VITE_API_URL = (import.meta as any)?.env?.VITE_API_URL || ''
+} catch {}
+const NEXT_PUBLIC_API_URL = typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : undefined
+const DEFAULT_BACKEND = 'http://localhost:3001'
+const BASE = (NEXT_PUBLIC_API_URL as string | undefined) || VITE_API_URL || DEFAULT_BACKEND
 
 function url(p: string) {
-  if (API_URL) return `${API_URL}${p}`
-  return p // rely on dev proxy (/api -> backend)
+  if (BASE) return `${BASE}${p}`
+  return p // rely on dev proxy (/api -> backend) or same-origin Next server if configured
 }
 
 export const apiClient = {
