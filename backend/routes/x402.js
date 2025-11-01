@@ -6,6 +6,10 @@ const hederaClient = require('../services/hedera-client');
 // Issue 402 challenge
 router.post('/challenge', async (req, res) => {
   const { amountHbar, memo } = req.body;
+  const payTo = process.env.HEDERA_ACCOUNT_ID;
+  if (!payTo) {
+    return res.status(500).json({ error: 'HEDERA_ACCOUNT_ID not set for payTo' });
+  }
   const challenge = {
     status: 402,
     payment: {
@@ -13,7 +17,7 @@ router.post('/challenge', async (req, res) => {
       asset: 'HBAR',
       amount: amountHbar,
       memo: memo || 'x402-payment',
-      payTo: process.env.HEDERA_ACCOUNT_ID || '0.0.0',
+      payTo,
     }
   };
   res.status(402).json(challenge);
