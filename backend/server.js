@@ -9,6 +9,8 @@ const messageRoutes = require('./routes/messages');
 const x402Routes = require('./routes/x402');
 const tokenRoutes = require('./routes/tokens');
 const authRoutes = require('./routes/auth');
+const a2aRoutes = require('./routes/a2a');
+const reputationRoutes = require('./routes/reputation');
 const errorHandler = require('./utils/error-handler');
 const { version } = require('./package.json');
 
@@ -33,6 +35,8 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/x402', x402Routes);
 app.use('/api/tokens', tokenRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/a2a', a2aRoutes);
+app.use('/api/reputation', reputationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

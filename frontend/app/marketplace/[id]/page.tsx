@@ -1,11 +1,20 @@
 "use client"
 
-import { useState, use } from "react"
+import { useState, use, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { mockAgents } from "@/lib/mock-agents"
 import { Badge } from "@/components/ui/badge"
 import { Star, Download, Shield, ArrowLeft, Check } from "lucide-react"
+
+interface Agent {
+  name: string
+  address: string
+  capabilities: string[]
+  metadata: string
+  trustScore: string
+  registeredAt: string
+  isActive: boolean
+}
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -14,12 +23,38 @@ interface PageProps {
 export default function AgentDetailPage({ params }: PageProps) {
   const router = useRouter()
   const { id } = use(params)
+  const [agent, setAgent] = useState<Agent | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
 
-  const agent = mockAgents.find(a => a.id === id)
+  useEffect(() => {
+    fetchAgent()
+  }, [id])
 
-  if (!agent) {
+  const fetchAgent = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const res = await fetch(`${BASE_URL}/api/agents/${id}`)
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error('Agent not found')
+        }
+        throw new Error('Failed to fetch agent from backend')
+      }
+      const data = await res.json()
+      setAgent(data)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading || error || !agent) {
     return (
       <main className="min-h-screen">
         {/* Top navigation bar */}
@@ -38,16 +73,40 @@ export default function AgentDetailPage({ params }: PageProps) {
         </nav>
 
         <div className="p-12 flex items-center justify-center min-h-[calc(100vh-80px)]">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold mb-4">Agent Not Found</h1>
-            <p className="text-foreground/60 mb-8">The agent you're looking for doesn't exist.</p>
-            <Link
-              href="/marketplace"
-              className="px-6 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors inline-block"
-            >
-              Back to Marketplace
-            </Link>
-          </div>
+          {loading && (
+            <div className="text-center">
+              <p className="text-xl text-foreground/60">Loading agent details...</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-center max-w-2xl">
+              <h1 className="text-3xl font-bold mb-4 text-red-800">Failed to Load Agent</h1>
+              <p className="text-foreground/60 mb-4">{error}</p>
+              <div className="border border-red-300 bg-red-50 p-6 text-sm text-red-700 mb-8">
+                <p className="font-semibold mb-2">Possible issues:</p>
+                <ul className="list-disc list-inside space-y-1 text-left">
+                  <li>Backend server is not running</li>
+                  <li>Smart contract not deployed</li>
+                  <li>Agent with address {id} does not exist</li>
+                </ul>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={fetchAgent}
+                  className="px-6 py-3 border border-border hover:bg-accent transition-colors"
+                >
+                  Retry
+                </button>
+                <Link
+                  href="/marketplace"
+                  className="px-6 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors inline-block"
+                >
+                  Back to Marketplace
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     )
@@ -59,30 +118,6 @@ export default function AgentDetailPage({ params }: PageProps) {
       setIsConnected(true)
       setIsConnecting(false)
     }, 1000)
-  }
-
-  const renderStars = (rating: number) => {
-    const stars = []
-    const fullStars = Math.floor(rating)
-    const hasHalfStar = rating % 1 >= 0.5
-
-    for (let i = 0; i < fullStars; i++) {
-      stars.push(
-        <Star key={`full-${i}`} className="w-5 h-5 fill-foreground text-foreground" />
-      )
-    }
-    if (hasHalfStar) {
-      stars.push(
-        <Star key="half" className="w-5 h-5 fill-foreground/50 text-foreground" />
-      )
-    }
-    const emptyStars = 5 - stars.length
-    for (let i = 0; i < emptyStars; i++) {
-      stars.push(
-        <Star key={`empty-${i}`} className="w-5 h-5 text-foreground/20" />
-      )
-    }
-    return stars
   }
 
   return (
@@ -118,23 +153,25 @@ export default function AgentDetailPage({ params }: PageProps) {
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-4xl font-bold">{agent.name}</h1>
-                <Badge variant="outline">{agent.category}</Badge>
+                <Badge variant="outline">{agent.isActive ? 'Active' : 'Inactive'}</Badge>
               </div>
-              <p className="text-foreground/60 mb-4">by {agent.creator}</p>
-              <p className="text-lg text-foreground/80 max-w-3xl">
-                {agent.description}
-              </p>
+              <p className="text-sm text-foreground/60 mb-4 font-mono break-all">{agent.address}</p>
+              {agent.metadata && (
+                <p className="text-lg text-foreground/80 max-w-3xl">
+                  {agent.metadata}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Tags */}
+          {/* Capabilities */}
           <div className="flex flex-wrap gap-2 mt-6">
-            {agent.tags.map(tag => (
+            {agent.capabilities.map(cap => (
               <span
-                key={tag}
+                key={cap}
                 className="px-3 py-1 text-sm bg-foreground/5 border border-foreground/10 rounded"
               >
-                {tag}
+                {cap}
               </span>
             ))}
           </div>
@@ -152,113 +189,42 @@ export default function AgentDetailPage({ params }: PageProps) {
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div className="text-5xl font-bold">{agent.trustScore}</div>
-                  <div className="text-2xl text-foreground/60">/100</div>
-                </div>
-                <div className="w-full h-3 bg-foreground/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-foreground transition-all"
-                    style={{ width: `${agent.trustScore}%` }}
-                  />
                 </div>
                 <p className="text-sm text-foreground/60">
-                  This agent has been verified and audited. Trust score is calculated based on
-                  code quality, security audits, community feedback, and uptime reliability.
+                  This is the on-chain trust score for this agent. Trust scores are calculated based on
+                  smart contract interactions, transaction history, and network reputation.
                 </p>
               </div>
             </div>
 
-            {/* User Ratings */}
+            {/* Capabilities Detail */}
             <div className="border border-border p-8">
-              <div className="flex items-center gap-3 mb-6">
-                <Star className="w-6 h-6 fill-foreground text-foreground" />
-                <h2 className="text-2xl font-semibold">User Ratings</h2>
-              </div>
-
-              <div className="space-y-6">
-                {/* Overall Rating */}
-                <div className="flex items-start gap-6">
-                  <div className="text-center">
-                    <div className="text-5xl font-bold mb-2">{agent.rating}</div>
-                    <div className="flex gap-1 mb-2">
-                      {renderStars(agent.rating)}
-                    </div>
-                    <div className="text-sm text-foreground/60">
-                      {agent.totalReviews.toLocaleString()} reviews
-                    </div>
-                  </div>
-
-                  {/* Rating Breakdown */}
-                  <div className="flex-1 space-y-2">
-                    {[5, 4, 3, 2, 1].map(stars => {
-                      const percentage = stars === 5 ? 75 : stars === 4 ? 18 : stars === 3 ? 5 : stars === 2 ? 1 : 1
-                      return (
-                        <div key={stars} className="flex items-center gap-3">
-                          <span className="text-sm w-8">{stars} ★</span>
-                          <div className="flex-1 h-2 bg-foreground/10 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-foreground transition-all"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                          <span className="text-sm text-foreground/60 w-12 text-right">
-                            {percentage}%
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Sample Reviews */}
-                <div className="pt-6 border-t border-border space-y-4">
-                  <h3 className="font-semibold text-lg">Recent Reviews</h3>
-
-                  <div className="space-y-4">
-                    <div className="p-4 bg-foreground/5 rounded">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex">
-                          {renderStars(5)}
-                        </div>
-                        <span className="text-sm text-foreground/60">2 days ago</span>
+              <h2 className="text-2xl font-semibold mb-6">Agent Capabilities</h2>
+              <div className="space-y-4">
+                {agent.capabilities.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {agent.capabilities.map(cap => (
+                      <div
+                        key={cap}
+                        className="p-4 border border-border bg-foreground/5 rounded"
+                      >
+                        <div className="font-medium">{cap}</div>
                       </div>
-                      <p className="text-sm text-foreground/80">
-                        Excellent agent! Saved me hours of manual work. The accuracy is impressive
-                        and the integration was seamless.
-                      </p>
-                      <div className="mt-2 text-xs text-foreground/60">- crypto_trader_42</div>
-                    </div>
-
-                    <div className="p-4 bg-foreground/5 rounded">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex">
-                          {renderStars(4)}
-                        </div>
-                        <span className="text-sm text-foreground/60">1 week ago</span>
-                      </div>
-                      <p className="text-sm text-foreground/80">
-                        Great performance overall. Would love to see more customization options
-                        in future updates.
-                      </p>
-                      <div className="mt-2 text-xs text-foreground/60">- defi_enthusiast</div>
-                    </div>
-
-                    <div className="p-4 bg-foreground/5 rounded">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex">
-                          {renderStars(5)}
-                        </div>
-                        <span className="text-sm text-foreground/60">2 weeks ago</span>
-                      </div>
-                      <p className="text-sm text-foreground/80">
-                        Best agent in its category. The {agent.creator} team provides excellent
-                        support and regular updates.
-                      </p>
-                      <div className="mt-2 text-xs text-foreground/60">- blockchain_dev</div>
-                    </div>
+                    ))}
                   </div>
-                </div>
+                ) : (
+                  <p className="text-foreground/60">No capabilities registered</p>
+                )}
               </div>
             </div>
+
+            {/* Additional Info */}
+            {agent.metadata && (
+              <div className="border border-border p-8">
+                <h2 className="text-2xl font-semibold mb-4">Metadata</h2>
+                <p className="text-foreground/80">{agent.metadata}</p>
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -294,22 +260,19 @@ export default function AgentDetailPage({ params }: PageProps) {
 
             {/* Stats */}
             <div className="border border-border p-6">
-              <h3 className="text-lg font-semibold mb-4">Statistics</h3>
+              <h3 className="text-lg font-semibold mb-4">Agent Information</h3>
               <div className="space-y-4">
                 <div>
-                  <div className="text-sm text-foreground/60 mb-1">Total Connections</div>
+                  <div className="text-sm text-foreground/60 mb-1">Status</div>
                   <div className="flex items-center gap-2">
-                    <Download className="w-4 h-4 text-foreground/60" />
-                    <span className="text-xl font-semibold">
-                      {agent.downloads.toLocaleString()}
-                    </span>
+                    <Badge variant="outline">{agent.isActive ? 'Active' : 'Inactive'}</Badge>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-border">
-                  <div className="text-sm text-foreground/60 mb-1">Last Updated</div>
+                  <div className="text-sm text-foreground/60 mb-1">Registered</div>
                   <span className="text-base font-medium">
-                    {new Date(agent.lastUpdated).toLocaleDateString('en-US', {
+                    {new Date(agent.registeredAt).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric'
@@ -318,35 +281,20 @@ export default function AgentDetailPage({ params }: PageProps) {
                 </div>
 
                 <div className="pt-4 border-t border-border">
-                  <div className="text-sm text-foreground/60 mb-1">Creator</div>
-                  <span className="text-base font-medium">{agent.creator}</span>
+                  <div className="text-sm text-foreground/60 mb-1">Agent Address</div>
+                  <div className="font-mono text-xs break-all">
+                    {agent.address}
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-border">
-                  <div className="text-sm text-foreground/60 mb-1">Category</div>
-                  <Badge variant="outline">{agent.category}</Badge>
+                  <div className="text-sm text-foreground/60 mb-1">Trust Score</div>
+                  <span className="text-base font-medium">{agent.trustScore}</span>
                 </div>
-              </div>
-            </div>
 
-            {/* Additional Info */}
-            <div className="border border-border p-6">
-              <h3 className="text-lg font-semibold mb-4">Information</h3>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <div className="text-foreground/60 mb-1">License</div>
-                  <div className="font-medium">MIT License</div>
-                </div>
-                <div className="pt-3 border-t border-border">
-                  <div className="text-foreground/60 mb-1">Version</div>
-                  <div className="font-medium">v2.{Math.floor(Math.random() * 10)}.{Math.floor(Math.random() * 10)}</div>
-                </div>
-                <div className="pt-3 border-t border-border">
-                  <div className="text-foreground/60 mb-1">Smart Contract</div>
-                  <div className="font-mono text-xs break-all">
-                    0x{Math.random().toString(16).substring(2, 10)}...
-                    {Math.random().toString(16).substring(2, 6)}
-                  </div>
+                <div className="pt-4 border-t border-border">
+                  <div className="text-sm text-foreground/60 mb-1">Capabilities Count</div>
+                  <span className="text-base font-medium">{agent.capabilities.length}</span>
                 </div>
               </div>
             </div>

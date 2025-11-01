@@ -9,7 +9,7 @@ describe("PaymentProcessor", function () {
     [payer, payee, other] = await ethers.getSigners();
     
     const PaymentProcessor = await ethers.getContractFactory("PaymentProcessor");
-    paymentProcessor = await PaymentProcessor.deploy();
+    paymentProcessor = await PaymentProcessor.deploy(payer.address);
     await paymentProcessor.waitForDeployment();
   });
 
@@ -20,6 +20,7 @@ describe("PaymentProcessor", function () {
       const tx = await paymentProcessor.connect(payer).createEscrow(
         payee.address,
         "Smart contract development",
+        0, // expirationDays (0 = default 30 days)
         { value: amount }
       );
 
@@ -50,6 +51,7 @@ describe("PaymentProcessor", function () {
         paymentProcessor.connect(payer).createEscrow(
           payee.address,
           "Service",
+          0,
           { value: amount }
         )
       ).to.emit(paymentProcessor, "EscrowCreated");
@@ -60,6 +62,7 @@ describe("PaymentProcessor", function () {
         paymentProcessor.connect(payer).createEscrow(
           payee.address,
           "Service",
+          0,
           { value: 0 }
         )
       ).to.be.revertedWith("Amount must be > 0");
@@ -72,6 +75,7 @@ describe("PaymentProcessor", function () {
         paymentProcessor.connect(payer).createEscrow(
           payer.address,
           "Service",
+          0,
           { value: amount }
         )
       ).to.be.revertedWith("Cannot pay yourself");
@@ -84,6 +88,7 @@ describe("PaymentProcessor", function () {
         paymentProcessor.connect(payer).createEscrow(
           payee.address,
           "",
+          0,
           { value: amount }
         )
       ).to.be.revertedWith("Description required");
@@ -96,6 +101,7 @@ describe("PaymentProcessor", function () {
         paymentProcessor.connect(payer).createEscrow(
           ethers.ZeroAddress,
           "Service",
+          0,
           { value: amount }
         )
       ).to.be.revertedWith("Invalid payee");
@@ -110,6 +116,7 @@ describe("PaymentProcessor", function () {
       const tx = await paymentProcessor.connect(payer).createEscrow(
         payee.address,
         "Service",
+        0,
         { value: amount }
       );
 
@@ -137,6 +144,10 @@ describe("PaymentProcessor", function () {
 
       const escrow = await paymentProcessor.getEscrow(escrowId);
       expect(escrow.status).to.equal(1); // Completed
+      
+      // ERC-8004: Should emit TrustEstablishmentTriggered event
+      const releaseTx = await paymentProcessor.connect(payer).releaseEscrow(escrowId).catch(() => null);
+      // Note: We can't test this here since escrow is already released, but event exists in contract
     });
 
     it("Should emit EscrowCompleted event", async function () {
@@ -169,6 +180,7 @@ describe("PaymentProcessor", function () {
       const tx = await paymentProcessor.connect(payer).createEscrow(
         payee.address,
         "Service",
+        0,
         { value: amount }
       );
 
@@ -237,12 +249,14 @@ describe("PaymentProcessor", function () {
       await paymentProcessor.connect(payer).createEscrow(
         payee.address,
         "Service 1",
+        0,
         { value: amount }
       );
 
       await paymentProcessor.connect(payer).createEscrow(
         payee.address,
         "Service 2",
+        0,
         { value: amount }
       );
 
@@ -256,12 +270,14 @@ describe("PaymentProcessor", function () {
       await paymentProcessor.connect(payer).createEscrow(
         payee.address,
         "Service 1",
+        0,
         { value: amount }
       );
 
       await paymentProcessor.connect(other).createEscrow(
         payee.address,
         "Service 2",
+        0,
         { value: amount }
       );
 
@@ -275,6 +291,7 @@ describe("PaymentProcessor", function () {
       await paymentProcessor.connect(payer).createEscrow(
         payee.address,
         "Service",
+        0,
         { value: amount }
       );
 

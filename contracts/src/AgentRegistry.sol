@@ -28,11 +28,40 @@ contract AgentRegistry is Ownable, Pausable {
         bool isActive;
     }
     
+    struct ReputationFeedback {
+        address fromAgent;
+        address toAgent;
+        uint256 rating;         // 1-5 stars
+        string comment;
+        bytes32 paymentTxHash;   // Link to proof-of-payment
+        uint256 timestamp;
+    }
+    
+    struct A2AInteraction {
+        address fromAgent;
+        address toAgent;
+        string capability;
+        bytes32 interactionId;
+        uint256 timestamp;
+        bool completed;
+    }
+    
     // Storage
     mapping(address => Agent) public agents;
     mapping(string => address[]) public capabilityIndex;
     mapping(address => mapping(string => bool)) private capabilityTracker; // Track duplicates
     address[] public agentList;
+    
+    // ERC-8004 Reputation Registry
+    mapping(address => ReputationFeedback[]) public agentReputation;
+    mapping(address => uint256) public averageRating;
+    mapping(address => uint256) public totalRatings;
+    mapping(address => uint256) public successfulTransactions;
+    
+    // A2A Communication tracking
+    mapping(bytes32 => A2AInteraction) public a2aInteractions;
+    mapping(address => bytes32[]) public agentInteractions;
+    bytes32[] public allInteractionIds;
     
     // Events
     event AgentRegistered(
@@ -59,6 +88,31 @@ contract AgentRegistry is Ownable, Pausable {
         address indexed agentAddress,
         string newName,
         string newMetadata
+    );
+    
+    event ReputationFeedbackSubmitted(
+        address indexed fromAgent,
+        address indexed toAgent,
+        uint256 rating
+    );
+    
+    event A2AInteractionInitiated(
+        bytes32 indexed interactionId,
+        address indexed fromAgent,
+        address indexed toAgent,
+        string capability
+    );
+    
+    event A2AInteractionCompleted(
+        bytes32 indexed interactionId,
+        address indexed fromAgent,
+        address indexed toAgent
+    );
+    
+    event TrustEstablished(
+        address indexed agent1,
+        address indexed agent2,
+        bytes32 indexed transactionHash
     );
     
     constructor(address initialOwner) Ownable(initialOwner) {}
@@ -104,7 +158,7 @@ contract AgentRegistry is Ownable, Pausable {
         newAgent.agentAddress = msg.sender;
         newAgent.capabilities = _capabilities;
         newAgent.metadata = _metadata;
-        newAgent.trustScore = 50; // Neutral starting score
+        newAgent.trustScore = _calculateInitialTrustScore(_capabilities, _metadata); // ERC-8004 compliant
         newAgent.registeredAt = block.timestamp;
         newAgent.isActive = true;
         
@@ -279,6 +333,226 @@ contract AgentRegistry is Ownable, Pausable {
      */
     function getAgentCount() external view returns (uint256) {
         return agentList.length;
+    }
+    
+    /**
+     * @notice Submit reputation feedback (ERC-8004 Reputation Registry)
+     * @param _toAgent Agent being rated
+     * @param _rating Rating from 1-5
+     * @param _comment Optional comment
+     * @param _paymentTxHash Transaction hash linking to proof-of-payment
+     */
+    function submitFeedback(
+        address _toAgent,
+        uint256 _rating,
+        string memory _comment,
+        bytes32 _paymentTxHash
+    ) external whenNotPaused {
+        require(agents[msg.sender].isActive, "You must be registered");
+        require(agents[_toAgent].isActive, "Target agent not found");
+        require(_rating >= 1 && _rating <= 5, "Rating must be 1-5");
+        require(msg.sender != _toAgent, "Cannot rate yourself");
+        
+        ReputationFeedback memory feedback = ReputationFeedback({
+            fromAgent: msg.sender,
+            toAgent: _toAgent,
+            rating: _rating,
+            comment: _comment,
+            paymentTxHash: _paymentTxHash,
+            timestamp: block.timestamp
+        });
+        
+        agentReputation[_toAgent].push(feedback);
+        totalRatings[_toAgent]++;
+        
+        // Recalculate average rating and update trust score
+        uint256 previousTotal = (totalRatings[_toAgent] - 1) * averageRating[_toAgent];
+        uint256 newTotal = previousTotal + (_rating * 20); // Convert 1-5 to 0-100 scale
+        averageRating[_toAgent] = newTotal / totalRatings[_toAgent];
+        
+        // Update trust score based on average rating
+        agents[_toAgent].trustScore = averageRating[_toAgent];
+        
+        emit ReputationFeedbackSubmitted(msg.sender, _toAgent, _rating);
+        emit TrustScoreUpdated(_toAgent, agents[_toAgent].trustScore);
+    }
+    
+    /**
+     * @notice Get reputation feedback for an agent
+     * @param _agentAddress Agent address
+     * @return Array of reputation feedbacks
+     */
+    function getAgentReputation(address _agentAddress) 
+        external 
+        view 
+        returns (ReputationFeedback[] memory) 
+    {
+        return agentReputation[_agentAddress];
+    }
+    
+    /**
+     * @notice Initiate A2A (Agent-to-Agent) communication
+     * @param _toAgent Target agent address
+     * @param _capability Capability being used for interaction
+     * @return interactionId Unique interaction identifier
+     */
+    function initiateA2ACommunication(
+        address _toAgent,
+        string memory _capability
+    ) external whenNotPaused returns (bytes32) {
+        require(agents[msg.sender].isActive, "You must be registered");
+        require(agents[_toAgent].isActive, "Target agent not found");
+        require(msg.sender != _toAgent, "Cannot interact with yourself");
+        require(agents[_toAgent].trustScore >= 40, "Target agent trust score too low");
+        
+        bytes32 interactionId = keccak256(
+            abi.encodePacked(
+                msg.sender,
+                _toAgent,
+                _capability,
+                block.timestamp,
+                block.number,
+                agentInteractions[msg.sender].length
+            )
+        );
+        
+        require(a2aInteractions[interactionId].fromAgent == address(0), "Interaction exists");
+        
+        A2AInteraction storage interaction = a2aInteractions[interactionId];
+        interaction.fromAgent = msg.sender;
+        interaction.toAgent = _toAgent;
+        interaction.capability = _capability;
+        interaction.interactionId = interactionId;
+        interaction.timestamp = block.timestamp;
+        interaction.completed = false;
+        
+        agentInteractions[msg.sender].push(interactionId);
+        agentInteractions[_toAgent].push(interactionId);
+        allInteractionIds.push(interactionId);
+        
+        emit A2AInteractionInitiated(interactionId, msg.sender, _toAgent, _capability);
+        
+        return interactionId;
+    }
+    
+    /**
+     * @notice Complete A2A interaction (establishes trust)
+     * @param _interactionId Interaction ID
+     */
+    function completeA2AInteraction(bytes32 _interactionId) external whenNotPaused {
+        A2AInteraction storage interaction = a2aInteractions[_interactionId];
+        require(interaction.fromAgent != address(0), "Interaction not found");
+        require(
+            msg.sender == interaction.fromAgent || msg.sender == interaction.toAgent,
+            "Not authorized"
+        );
+        require(!interaction.completed, "Already completed");
+        
+        interaction.completed = true;
+        
+        // Small trust boost for successful A2A interactions
+        if (agents[interaction.fromAgent].trustScore < 100) {
+            agents[interaction.fromAgent].trustScore += 1;
+        }
+        if (agents[interaction.toAgent].trustScore < 100) {
+            agents[interaction.toAgent].trustScore += 1;
+        }
+        
+        emit A2AInteractionCompleted(_interactionId, interaction.fromAgent, interaction.toAgent);
+        emit TrustScoreUpdated(interaction.fromAgent, agents[interaction.fromAgent].trustScore);
+        emit TrustScoreUpdated(interaction.toAgent, agents[interaction.toAgent].trustScore);
+    }
+    
+    /**
+     * @notice Establish trust from successful payment transaction
+     * @param _agent1 First agent address
+     * @param _agent2 Second agent address
+     * @param _transactionHash Transaction hash as proof
+     */
+    function establishTrustFromPayment(
+        address _agent1,
+        address _agent2,
+        bytes32 _transactionHash
+    ) external whenNotPaused {
+        require(agents[_agent1].isActive, "Agent1 not found");
+        require(agents[_agent2].isActive, "Agent2 not found");
+        require(msg.sender == _agent1 || msg.sender == _agent2, "Not authorized");
+        
+        successfulTransactions[_agent1]++;
+        successfulTransactions[_agent2]++;
+        
+        // Boost trust scores for successful transactions
+        if (agents[_agent1].trustScore < 100) {
+            agents[_agent1].trustScore = agents[_agent1].trustScore + 2 > 100 
+                ? 100 
+                : agents[_agent1].trustScore + 2;
+        }
+        if (agents[_agent2].trustScore < 100) {
+            agents[_agent2].trustScore = agents[_agent2].trustScore + 2 > 100 
+                ? 100 
+                : agents[_agent2].trustScore + 2;
+        }
+        
+        emit TrustEstablished(_agent1, _agent2, _transactionHash);
+        emit TrustScoreUpdated(_agent1, agents[_agent1].trustScore);
+        emit TrustScoreUpdated(_agent2, agents[_agent2].trustScore);
+    }
+    
+    /**
+     * @notice Get A2A interaction details
+     * @param _interactionId Interaction ID
+     * @return A2AInteraction struct
+     */
+    function getA2AInteraction(bytes32 _interactionId) 
+        external 
+        view 
+        returns (A2AInteraction memory) 
+    {
+        require(a2aInteractions[_interactionId].fromAgent != address(0), "Interaction not found");
+        return a2aInteractions[_interactionId];
+    }
+    
+    /**
+     * @notice Get agent's interaction history
+     * @param _agentAddress Agent address
+     * @return Array of interaction IDs
+     */
+    function getAgentInteractions(address _agentAddress) 
+        external 
+        view 
+        returns (bytes32[] memory) 
+    {
+        return agentInteractions[_agentAddress];
+    }
+    
+    /**
+     * @notice Internal: Calculate initial trust score (ERC-8004 compliant)
+     * @param _capabilities Agent capabilities
+     * @param _metadata Agent metadata
+     * @return Calculated trust score (0-100)
+     */
+    function _calculateInitialTrustScore(
+        string[] memory _capabilities,
+        string memory _metadata
+    ) internal pure returns (uint256) {
+        uint256 baseScore = 50; // Neutral starting score
+        
+        // Bonus for metadata completeness (ERC-8004 Identity Registry requirement)
+        if (bytes(_metadata).length > 0) {
+            baseScore += 5;
+        }
+        
+        // Bonus for multiple capabilities (shows agent versatility)
+        if (_capabilities.length >= 3) {
+            baseScore += 5;
+        }
+        
+        // Bonus for having 5+ capabilities
+        if (_capabilities.length >= 5) {
+            baseScore += 5;
+        }
+        
+        return baseScore > 100 ? 100 : baseScore;
     }
     
     /**

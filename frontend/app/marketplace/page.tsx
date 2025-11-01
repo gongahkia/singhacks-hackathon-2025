@@ -100,93 +100,133 @@ export default function MarketplacePage() {
           </div>
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-20">
+            <p className="text-xl text-foreground/60">Loading agents from backend...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="border border-red-300 bg-red-50 p-8 text-center">
+            <p className="text-xl font-semibold text-red-800 mb-2">Failed to Load Agents</p>
+            <p className="text-sm text-red-600 mb-4">{error}</p>
+            <div className="space-y-2 text-sm text-red-700">
+              <p>Possible issues:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Backend server is not running (should be at http://localhost:3001)</li>
+                <li>AgentRegistry smart contract is not deployed</li>
+                <li>AGENT_REGISTRY_ADDRESS not set in backend .env</li>
+              </ul>
+            </div>
+            <button
+              onClick={fetchAgents}
+              className="mt-6 px-6 py-3 bg-red-600 text-white hover:bg-red-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Results Count */}
-        <div className="mb-6 text-foreground/60">
-          {filteredAgents.length} {filteredAgents.length === 1 ? 'agent' : 'agents'} found
-        </div>
+        {!loading && !error && (
+          <div className="mb-6 text-foreground/60">
+            {filteredAgents.length} {filteredAgents.length === 1 ? 'agent' : 'agents'} found
+          </div>
+        )}
 
         {/* Agent Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAgents.map(agent => (
-            <Link
-              key={agent.id}
-              href={`/marketplace/${agent.id}`}
-              className="border border-border p-6 hover:border-foreground/40 transition-all hover:shadow-lg group"
-            >
-              {/* Agent Header */}
-              <div className="mb-4">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-xl font-semibold group-hover:text-foreground/80 transition-colors">
-                    {agent.name}
-                  </h3>
-                  <Badge variant="outline" className="shrink-0">
-                    {agent.category}
-                  </Badge>
+        {!loading && !error && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredAgents.map(agent => (
+              <Link
+                key={agent.address}
+                href={`/marketplace/${agent.address}`}
+                className="border border-border p-6 hover:border-foreground/40 transition-all hover:shadow-lg group"
+              >
+                {/* Agent Header */}
+                <div className="mb-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="text-xl font-semibold group-hover:text-foreground/80 transition-colors">
+                      {agent.name}
+                    </h3>
+                    <Badge variant="outline" className="shrink-0 text-xs">
+                      {agent.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-foreground/40 font-mono break-all mb-2">
+                    {agent.address}
+                  </p>
                 </div>
-                <p className="text-sm text-foreground/60 line-clamp-2">
-                  {agent.description}
-                </p>
-              </div>
 
-              {/* Stats */}
-              <div className="space-y-3 mb-4">
-                {/* Trust Score */}
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-foreground/60" />
-                  <span className="text-sm text-foreground/60">Trust Score:</span>
-                  <span className="text-sm font-semibold">{agent.trustScore}/100</span>
-                  <div className="flex-1 h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-foreground transition-all"
-                      style={{ width: `${agent.trustScore}%` }}
-                    />
+                {/* Stats */}
+                <div className="space-y-3 mb-4">
+                  {/* Trust Score */}
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-foreground/60" />
+                    <span className="text-sm text-foreground/60">Trust Score:</span>
+                    <span className="text-sm font-semibold">{agent.trustScore}</span>
+                  </div>
+
+                  {/* Registered Date */}
+                  <div className="flex items-center gap-2">
+                    <Download className="w-4 h-4 text-foreground/60" />
+                    <span className="text-sm text-foreground/60">
+                      Registered: {new Date(agent.registeredAt).toLocaleDateString()}
+                    </span>
                   </div>
                 </div>
 
-                {/* Rating */}
-                <div className="flex items-center gap-2">
-                  <Star className="w-4 h-4 fill-foreground text-foreground" />
-                  <span className="text-sm font-semibold">{agent.rating}</span>
-                  <span className="text-sm text-foreground/60">
-                    ({agent.totalReviews.toLocaleString()} reviews)
-                  </span>
+                {/* Capabilities */}
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {agent.capabilities.slice(0, 3).map(cap => (
+                    <span
+                      key={cap}
+                      className="px-2 py-0.5 text-xs bg-foreground/5 border border-foreground/10 rounded"
+                    >
+                      {cap}
+                    </span>
+                  ))}
+                  {agent.capabilities.length > 3 && (
+                    <span className="px-2 py-0.5 text-xs text-foreground/60">
+                      +{agent.capabilities.length - 3} more
+                    </span>
+                  )}
                 </div>
 
-                {/* Downloads */}
-                <div className="flex items-center gap-2">
-                  <Download className="w-4 h-4 text-foreground/60" />
-                  <span className="text-sm text-foreground/60">
-                    {agent.downloads.toLocaleString()} connections
-                  </span>
-                </div>
-              </div>
-
-              {/* Tags */}
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {agent.tags.slice(0, 3).map(tag => (
-                  <span
-                    key={tag}
-                    className="px-2 py-0.5 text-xs bg-foreground/5 border border-foreground/10 rounded"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              {/* Footer */}
-              <div className="pt-4 border-t border-border flex items-center justify-between text-xs text-foreground/60">
-                <span>by {agent.creator}</span>
-                <span>Updated {new Date(agent.lastUpdated).toLocaleDateString()}</span>
-              </div>
-            </Link>
-          ))}
-        </div>
+                {/* Metadata */}
+                {agent.metadata && (
+                  <div className="pt-4 border-t border-border text-xs text-foreground/60">
+                    {agent.metadata}
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* No Results */}
-        {filteredAgents.length === 0 && (
+        {!loading && !error && filteredAgents.length === 0 && agents.length > 0 && (
           <div className="text-center py-20">
             <p className="text-xl text-foreground/60">No agents found matching your criteria</p>
             <p className="text-sm text-foreground/40 mt-2">Try adjusting your search or filters</p>
+          </div>
+        )}
+
+        {/* No Agents at All */}
+        {!loading && !error && agents.length === 0 && (
+          <div className="border border-border p-12 text-center">
+            <p className="text-xl font-semibold text-foreground mb-2">No Agents Registered Yet</p>
+            <p className="text-sm text-foreground/60 mb-6">
+              There are no agents registered on the blockchain yet. Be the first to register an agent!
+            </p>
+            <Link
+              href="/"
+              className="px-6 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors inline-block"
+            >
+              Go to Dashboard to Register
+            </Link>
           </div>
         )}
       </div>
