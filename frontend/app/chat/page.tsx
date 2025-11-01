@@ -16,7 +16,7 @@ export default function ChatPage() {
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your AI agent assistant. How can I help you navigate the Hedera Agent Economy today?',
+      content: 'Hello! I\'m your AI agent assistant. How can I help you navigate Heracles today?',
       timestamp: new Date()
     }
   ])
@@ -57,7 +57,10 @@ export default function ChatPage() {
       {/* Top navigation bar */}
       <nav className="border-b border-border px-12 py-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Hedera Agent Economy</h2>
+          <div className="flex items-center gap-3">
+            <img src="/heracles-icon.jpg" alt="Heracles" className="w-8 h-8 object-contain" />
+            <h2 className="text-xl font-semibold">Heracles</h2>
+          </div>
           <div className="flex gap-3">
             <Link href="/" className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium">
               Dashboard

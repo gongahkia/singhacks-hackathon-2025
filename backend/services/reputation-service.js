@@ -14,8 +14,22 @@ try {
 
 class ReputationService {
   constructor() {
-    this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-    this.wallet = new ethers.Wallet(process.env.EVM_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY || '0x' + '0'.repeat(64), this.provider);
+    this.provider = null;
+    this.wallet = null;
+    this.agentRegistry = null;
+    // Lazy init to avoid crashing server when env vars are missing at boot
+  }
+
+  ensureInitialized() {
+    if (this.wallet) return;
+
+    const { RPC_URL, EVM_PRIVATE_KEY } = process.env;
+    if (!EVM_PRIVATE_KEY || !EVM_PRIVATE_KEY.startsWith('0x')) {
+      throw new Error('EVM_PRIVATE_KEY must be set (hex 0x...) for reputation operations');
+    }
+
+    this.provider = new ethers.JsonRpcProvider(RPC_URL);
+    this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
     this.agentRegistry = new ethers.Contract(
       deploymentInfo.contracts.AgentRegistry,
       AgentRegistryABI,
@@ -27,6 +41,7 @@ class ReputationService {
    * Submit reputation feedback (ERC-8004 Reputation Registry)
    */
   async submitFeedback(fromAgent, toAgent, rating, comment = '', paymentTxHash = '0x0000000000000000000000000000000000000000000000000000000000000000') {
+    this.ensureInitialized();
     try {
       if (rating < 1 || rating > 5) {
         throw new Error('Rating must be between 1 and 5');
@@ -69,6 +84,7 @@ class ReputationService {
    * Get reputation feedback for an agent
    */
   async getAgentReputation(agentAddress) {
+    this.ensureInitialized();
     try {
       const feedbacks = await this.agentRegistry.getAgentReputation(agentAddress);
       return feedbacks.map(f => ({
@@ -88,6 +104,7 @@ class ReputationService {
    * Establish trust from successful payment
    */
   async establishTrustFromPayment(agent1, agent2, transactionHash) {
+    this.ensureInitialized();
     try {
       const txHashBytes = ethers.isHexString(transactionHash) 
         ? transactionHash 
