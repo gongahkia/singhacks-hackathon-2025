@@ -6,11 +6,12 @@ const a2aService = require('../services/a2a-service');
 // Initiate A2A communication
 router.post('/communicate', async (req, res, next) => {
   try {
-    const { fromAgent, toAgent, capability } = req.body;
+    const { fromAgent, toAgent, capability, fromAgentPrivateKey } = req.body;
     if (!fromAgent || !toAgent || !capability) {
       return res.status(400).json({ error: 'fromAgent, toAgent, and capability are required' });
     }
-    const result = await a2aService.initiateCommunication(fromAgent, toAgent, capability);
+    // Phase 1 (Demo): If fromAgentPrivateKey provided, use agent wallet
+    const result = await a2aService.initiateCommunication(fromAgent, toAgent, capability, fromAgentPrivateKey || null);
     res.json(result);
   } catch (e) { next(e); }
 });
@@ -19,7 +20,9 @@ router.post('/communicate', async (req, res, next) => {
 router.post('/interactions/:interactionId/complete', async (req, res, next) => {
   try {
     const { interactionId } = req.params;
-    const result = await a2aService.completeInteraction(interactionId);
+    const { completer, completerPrivateKey } = req.body;
+    // Phase 1 (Demo): If completer and completerPrivateKey provided, use agent wallet
+    const result = await a2aService.completeInteraction(interactionId, completer || null, completerPrivateKey || null);
     res.json(result);
   } catch (e) { next(e); }
 });

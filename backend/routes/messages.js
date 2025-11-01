@@ -3,6 +3,25 @@ const express = require('express');
 const router = express.Router();
 const hederaClient = require('../services/hedera-client');
 
+// Initialize all required HCS topics (creates if missing)
+router.post('/topics/initialize', async (req, res, next) => {
+  try {
+    const topics = {};
+    
+    // Create/validate all required topics
+    topics.AGENT_TOPIC_ID = await hederaClient.ensureTopic('AGENT_TOPIC_ID', 'Agent', 'Agent registration events');
+    topics.PAYMENT_TOPIC_ID = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
+    topics.A2A_TOPIC_ID = await hederaClient.ensureTopic('A2A_TOPIC_ID', 'A2A', 'Agent-to-agent communication events');
+    
+    res.json({
+      success: true,
+      message: 'All HCS topics initialized',
+      topics,
+      note: 'Add these topic IDs to your .env file to persist them'
+    });
+  } catch (e) { next(e); }
+});
+
 // Create new topic
 router.post('/topics', async (req, res, next) => {
   try {

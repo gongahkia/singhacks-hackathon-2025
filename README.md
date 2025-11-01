@@ -48,6 +48,25 @@ This hackathon project includes **4 comprehensive guides** for your team:
   - API client specifications
   - Component and page requirements
 
+### 5. **[TESTING_GUIDE.md](./docs/TESTING_GUIDE.md)** - Testing & Demo 🧪
+- **For**: All Developers, Demo Preparation
+- **Time**: 30 minutes
+- **Content**:
+  - How to test agent-to-agent payment and communication
+  - REST API testing examples
+  - Hedera MCP tools usage
+  - Complete demo flow and scripts
+  - Troubleshooting guide
+
+### 6. **[MCP_DEMO_GUIDE.md](./docs/MCP_DEMO_GUIDE.md)** - Hedera MCP Integration 🛠️
+- **For**: Developers using Hedera MCP tools
+- **Time**: 20 minutes
+- **Content**:
+  - Hedera MCP tools setup
+  - Direct blockchain operations
+  - Hybrid API + MCP workflows
+  - Complete payment flow examples
+
 ---
 
 ## 🚀 Quick Start (5 Minutes)
@@ -81,6 +100,30 @@ cd frontend && npm install && cd ..
 - Follow your hour-by-hour timeline in your role-specific guide
 - Communicate frequently with team
 - Test early and often
+
+### Step 4: Test Agent-to-Agent Features
+
+**Option A: Single Wallet (Limited)**
+```bash
+# Run automated demo (uses single wallet - limited A2A testing)
+node tests/integration/a2a-payment-demo.js
+```
+
+**Option B: Multi-Wallet (Full A2A Testing) - Recommended**
+```bash
+# 1. Generate .env files for two agents
+npm run setup:agents
+
+# 2. Create two Hedera accounts (via MCP or Portal)
+#    See docs/MULTI_AGENT_SETUP.md for details
+
+# 3. Fill in .env.alice and .env.bob with account credentials
+
+# 4. Run full multi-agent demo
+npm run test:a2a-demo-multi
+```
+
+See `docs/MULTI_AGENT_SETUP.md` for complete multi-agent setup instructions.
 
 ---
 
