@@ -1,12 +1,11 @@
 {
   "network": "hedera_testnet",
   "chainId": 296,
-  "deployer": "0x...",
+  "deployer": "0xYourDeployerAddress",
   "contracts": {
-    "AgentRegistry": "0x...",
-    "PaymentProcessor": "0x..."
+    "AgentRegistry": "0xAgentRegistryContractAddress",
+    "PaymentProcessor": "0xPaymentProcessorContractAddress"
   },
-  "timestamp": "2025-01-XX",
-  "blockNumber": 0
+  "timestamp": "2025-11-01T00:00:00.000Z",
+  "blockNumber": 12345
 }
-
