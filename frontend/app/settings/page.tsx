@@ -27,15 +27,32 @@ export default function SettingsPage() {
   const [geminiKey, setGeminiKey] = useState('')
   const [geminiUrl, setGeminiUrl] = useState('')
   const [settingsSaveMsg, setSettingsSaveMsg] = useState<string | null>(null)
+  // Registered agent for chat
+  const [registeredAgentName, setRegisteredAgentName] = useState('')
+  const [agentSavedMsg, setAgentSavedMsg] = useState<string | null>(null)
 
   useEffect(() => {
     // Load current masked Gemini API settings on mount
     apiClient.getSettings().then((res) => {
       if (res && res.config) {
-        setGeminiKey(res.config.GEMINI_API_KEY || '')
-        setGeminiUrl(res.config.GEMINI_API_URL || '')
+        // Don't set masked values in the input - keep them empty so user knows to enter new key
+        // Only set non-masked values
+        const apiKey = res.config.GEMINI_API_KEY || ''
+        const apiUrl = res.config.GEMINI_API_URL || ''
+
+        // Check if API key is masked (contains "..." or is masked format)
+        if (!apiKey.includes('...')) {
+          setGeminiKey(apiKey)
+        }
+        setGeminiUrl(apiUrl)
       }
     }).catch(() => {})
+
+    // Load registered agent from localStorage (used by Chat)
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('heracles.registeredAgentName') : null
+      if (stored) setRegisteredAgentName(stored)
+    } catch {}
   }, [])
 
   const onConnect = async () => {
@@ -199,6 +216,42 @@ export default function SettingsPage() {
             )}
           </section>
 
+          {/* Registered Agent for Chat */}
+          <section className="border border-border p-8 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Registered Agent (for Chat)</h2>
+              <p className="text-sm text-foreground/60">This name is used by the Agent Chat when initializing your session.</p>
+            </div>
+            <div className="max-w-xl flex items-center gap-3">
+              <input
+                className="flex-1 px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g., Alice Tan"
+                value={registeredAgentName}
+                onChange={(e) => setRegisteredAgentName(e.target.value)}
+              />
+              <button
+                className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => {
+                  try {
+                    const v = (registeredAgentName || '').trim()
+                    if (typeof window !== 'undefined') {
+                      window.localStorage.setItem('heracles.registeredAgentName', v)
+                      window.dispatchEvent(new CustomEvent('heracles:agentNameChanged', { detail: { name: v } }))
+                    }
+                    setAgentSavedMsg('Registered agent saved')
+                    setTimeout(() => setAgentSavedMsg(null), 1500)
+                  } catch (e: any) {
+                    setAgentSavedMsg('Save failed')
+                    setTimeout(() => setAgentSavedMsg(null), 2000)
+                  }
+                }}
+              >
+                Save
+              </button>
+            </div>
+            {agentSavedMsg && <div className="text-sm text-foreground/70">{agentSavedMsg}</div>}
+          </section>
+
           {/* Gemini API Key Section */}
           <section className="border border-border p-8 space-y-6">
             <div>
@@ -211,14 +264,14 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
               <input
                 className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="GEMINI_API_KEY"
+                placeholder="Enter your Gemini API key (AIza...)"
                 value={geminiKey}
                 onChange={(e) => setGeminiKey(e.target.value)}
               />
 
               <input
                 className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="GEMINI_API_URL (optional)"
+                placeholder="GEMINI_API_URL (optional, leave empty for default)"
                 value={geminiUrl}
                 onChange={(e) => setGeminiUrl(e.target.value)}
               />
@@ -230,8 +283,16 @@ export default function SettingsPage() {
                 onClick={async () => {
                   try {
                     setSettingsSaveMsg(null)
-                    await apiClient.updateSettings({ GEMINI_API_KEY: geminiKey, GEMINI_API_URL: geminiUrl })
-                    setSettingsSaveMsg('Saved')
+                    // Only send non-empty values to avoid overwriting with empty strings
+                    const updateData: Record<string, string> = {}
+                    if (geminiKey && geminiKey.trim()) {
+                      updateData.GEMINI_API_KEY = geminiKey.trim()
+                    }
+                    if (geminiUrl !== undefined) {
+                      updateData.GEMINI_API_URL = geminiUrl.trim()
+                    }
+                    await apiClient.updateSettings(updateData)
+                    setSettingsSaveMsg('Saved successfully!')
                   } catch (e: any) {
                     setSettingsSaveMsg('Save failed: ' + (e.message || e))
                   }

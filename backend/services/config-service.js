@@ -34,6 +34,17 @@ class ConfigService {
         }
       });
 
+      // Reinitialize Gemini service if API key was updated
+      if (newConfig.GEMINI_API_KEY || newConfig.GEMINI_API_URL) {
+        try {
+          const geminiService = require('./gemini-service');
+          geminiService.reinitialize();
+          console.log('✅ Gemini service reinitialized after config update');
+        } catch (err) {
+          console.warn('⚠️  Could not reinitialize Gemini service:', err.message);
+        }
+      }
+
       return { success: true };
     } catch (error) {
       console.error('Failed to save config:', error.message);
@@ -65,7 +76,7 @@ class ConfigService {
   }
 
   isSensitiveKey(key) {
-    const sensitiveKeys = ['PRIVATE_KEY', 'EVM_PRIVATE_KEY', 'OPERATOR_KEY', 'SECRET'];
+    const sensitiveKeys = ['PRIVATE_KEY', 'EVM_PRIVATE_KEY', 'OPERATOR_KEY', 'SECRET', 'API_KEY'];
     return sensitiveKeys.some(sk => key.includes(sk));
   }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { apiClient } from './lib/api-client'
+import { getAgentTransactions, AgentTxRecord } from '../lib/tx-store'
 import Link from 'next/link'
 
 type Health = { status: string; timestamp: string; network?: string; version?: string }
@@ -21,67 +22,31 @@ export default function App() {
   const [agents, setAgents] = useState<any[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingAgents, setLoadingAgents] = useState(true)
-  const [transactions] = useState<Transaction[]>([
-    {
-      id: '1',
-      type: 'Agent Registration',
-      agent: 'Trading Bot Alpha',
-      amount: '0.05 HBAR',
-      status: 'completed',
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      hash: '0x1234...5678'
-    },
-    {
-      id: '2',
-      type: 'Token Transfer',
-      agent: 'DeFi Manager',
-      amount: '10.00 USDC',
-      status: 'completed',
-      timestamp: new Date(Date.now() - 7200000).toISOString(),
-      hash: '0xabcd...efgh'
-    },
-    {
-      id: '3',
-      type: 'Smart Contract Call',
-      agent: 'NFT Minter',
-      amount: '0.12 HBAR',
-      status: 'pending',
-      timestamp: new Date(Date.now() - 1800000).toISOString(),
-      hash: '0x9876...5432'
-    },
-    {
-      id: '4',
-      type: 'Agent Payment',
-      agent: 'Trading Bot Alpha',
-      amount: '2.50 HBAR',
-      status: 'completed',
-      timestamp: new Date(Date.now() - 10800000).toISOString(),
-      hash: '0xfedc...ba98'
-    },
-    {
-      id: '5',
-      type: 'Token Swap',
-      agent: 'DeFi Manager',
-      amount: '5.00 HBAR',
-      status: 'failed',
-      timestamp: new Date(Date.now() - 14400000).toISOString(),
-      hash: '0x1111...2222'
-    },
-    {
-      id: '6',
-      type: 'NFT Purchase',
-      agent: 'NFT Minter',
-      amount: '15.00 HBAR',
-      status: 'completed',
-      timestamp: new Date(Date.now() - 18000000).toISOString(),
-      hash: '0x3333...4444'
-    }
-  ])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
 
   useEffect(() => {
     apiClient.healthCheck().then(setHealth).catch((e: any) => setError(e.message))
     loadAgents()
+    hydrateTransactions()
+    const onNewTx = () => hydrateTransactions()
+    window.addEventListener('agent-tx-added', onNewTx as EventListener)
+    return () => window.removeEventListener('agent-tx-added', onNewTx as EventListener)
   }, [])
+  const hydrateTransactions = () => {
+    const fromStore = getAgentTransactions()
+    const mapped: Transaction[] = fromStore.map(mapAgentTxToRow)
+    setTransactions(mapped)
+  }
+
+  const mapAgentTxToRow = (r: AgentTxRecord): Transaction => ({
+    id: r.id,
+    type: 'Agent Payment',
+    agent: r.sellerName || 'Unknown Agent',
+    amount: `${r.amountHBAR} HBAR`,
+    status: r.status,
+    timestamp: new Date(r.timestamp).toISOString(),
+    hash: r.txHash || r.escrowId
+  })
 
   const loadAgents = async () => {
     setLoadingAgents(true)
@@ -124,7 +89,7 @@ export default function App() {
         {/* Page header */}
         <div className="mb-12">
           <h1 className="text-5xl font-bold mb-2">Dashboard</h1>
-          <p className="text-foreground/60">Welcome to the . This platform allows you to discover, register, and interact with AI agents that can perform automated tasks on the Hedera blockchain network.</p>
+          <p className="text-foreground/60">Welcome to the Heracles Dashboard. This platform allows you to discover, register, and interact with AI agents that can perform automated tasks on the Hedera blockchain network.</p>
         </div>
 
         <div className="space-y-8">
@@ -137,18 +102,10 @@ export default function App() {
                 <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
 {JSON.stringify(health, null, 2)}
                 </pre>
-                <div className="flex gap-3">
-                  <Link
-                    href="/marketplace"
-                    className="px-6 py-3 border border-border hover:bg-accent transition-colors font-medium"
-                  >
-                    Browse Agent Marketplace
-                  </Link>
-                </div>
               </div>
             ) : (
               <p className="text-foreground/60">Loading network status...</p>
-            )}Hedera Agent Economy
+            )}
           </section>
 
           {/* Agents Section */}
@@ -219,9 +176,10 @@ export default function App() {
               <div className="max-h-96 overflow-y-auto">
                 {transactions.length > 0 ? (
                   transactions.map((tx) => (
-                    <div
+                    <Link
+                      href={`/transactions/${encodeURIComponent(tx.id)}`}
                       key={tx.id}
-                      className="border-b border-border px-4 py-3 hover:bg-foreground/5 transition-colors"
+                      className="block border-b border-border px-4 py-3 hover:bg-foreground/5 transition-colors"
                     >
                       <div className="grid grid-cols-6 gap-4 text-sm">
                         <div className="font-medium">{tx.type}</div>
@@ -247,7 +205,7 @@ export default function App() {
                           {tx.hash || 'N/A'}
                         </div>
                       </div>
-                    </div>
+                    </Link>
                   ))
                 ) : (
                   <div className="px-4 py-8 text-center text-foreground/60">
