@@ -1,8 +1,6 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { useAccount, useConnect, useDisconnect, useSignMessage } from 'wagmi'
-import { WalletConnectButton } from '../../components/wallet-connect-button'
 import { apiClient } from '../../src/lib/api-client'
 import Link from 'next/link'
 
@@ -19,11 +17,11 @@ export default function SettingsPage() {
   const [connectError, setConnectError] = useState<string | null>(null)
   const [connectResult, setConnectResult] = useState<any | null>(null)
 
-  // Wallet connection using wagmi
-  const { address: walletAddress, isConnected: walletConnected, connector } = useAccount()
-  const { connect, connectors, isPending } = useConnect()
-  const { disconnect } = useDisconnect()
-  const { signMessageAsync } = useSignMessage()
+  // Wallet connection state
+  const [walletType, setWalletType] = useState<'metamask' | 'walletconnect' | ''>('')
+  const [walletAddress, setWalletAddress] = useState('')
+  const [walletConnected, setWalletConnected] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
 
   // Gemini settings
   const [geminiKey, setGeminiKey] = useState('')
@@ -77,31 +75,26 @@ export default function SettingsPage() {
     }
   }
 
-  // Auto-fill EVM address when wallet connects
-  useEffect(() => {
-    if (walletAddress && !evmAddress) {
-      setEvmAddress(walletAddress)
-    }
-  }, [walletAddress, evmAddress])
+  const connectWallet = async () => {
+    setWalletError(null)
+    try {
+      if (!walletType) {
+        throw new Error('Please select a wallet type (MetaMask or WalletConnect)')
+      }
 
-  // Helper to sign message for agent registration
-  const signMessageForRegistration = async () => {
-    if (!walletAddress) {
-      throw new Error('Please connect your wallet first')
+      // Simulated wallet connection logic
+      const simulatedAddress = walletAddress || `0x${Math.random().toString(16).substr(2, 40)}`
+      setWalletAddress(simulatedAddress)
+      setWalletConnected(true)
+    } catch (e: any) {
+      setWalletError(e.message)
     }
-    
-    const messageObject = {
-      action: 'registerAgent',
-      name: agentName || undefined,
-      capabilities: capability ? [capability] : [],
-      timestamp: new Date().toISOString(),
-      address: walletAddress,
-    }
+  }
 
-    const message = JSON.stringify(messageObject)
-    const signature = await signMessageAsync({ message })
-    setSignature(signature)
-    return signature
+  const disconnectWallet = () => {
+    setWalletAddress('')
+    setWalletConnected(false)
+    setWalletType('')
   }
 
   return (
@@ -168,7 +161,6 @@ export default function SettingsPage() {
                 placeholder="EVM Address (0x...)"
                 value={evmAddress}
                 onChange={(e) => setEvmAddress(e.target.value)}
-                disabled={!!walletAddress}
               />
               <input
                 className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
@@ -184,42 +176,19 @@ export default function SettingsPage() {
               />
               <input
                 className="px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Signature (will be generated when you click 'Sign & Verify')"
+                placeholder="Signature (from wallet to verify)"
                 value={signature}
                 onChange={(e) => setSignature(e.target.value)}
-                readOnly
               />
             </div>
 
             <div className="flex gap-3">
-              {!signature && walletConnected && (
-                <button
-                  className="px-6 py-3 bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
-                  onClick={async () => {
-                    try {
-                      setConnectError(null)
-                      await signMessageForRegistration()
-                    } catch (e: any) {
-                      setConnectError(e.message)
-                    }
-                  }}
-                >
-                  Sign & Verify
-                </button>
-              )}
-              {signature && (
-                <button
-                  className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors"
-                  onClick={onConnect}
-                >
-                  Verify Signature
-                </button>
-              )}
-              {!walletConnected && (
-                <div className="text-sm text-foreground/60">
-                  Connect your wallet to sign messages
-                </div>
-              )}
+              <button
+                className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors"
+                onClick={onConnect}
+              >
+                Verify Signature
+              </button>
               {connectResult && (
                 <Link
                   href="/marketplace"
@@ -346,17 +315,74 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            <div className="max-w-3xl">
-              <WalletConnectButton />
-              
-              {walletConnected && walletAddress && (
-                <div className="mt-4 p-4 border border-green-200 bg-green-50 text-green-800 text-sm">
-                  <div className="font-medium mb-1">Wallet Connected Successfully!</div>
-                  <div className="text-xs">Connector: {connector?.name || 'Unknown'}</div>
-                  <div className="text-xs font-mono mt-2 break-all">{walletAddress}</div>
+            {!walletConnected ? (
+              <div className="space-y-4 max-w-3xl">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Select Wallet Type</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      className={`px-4 py-3 border transition-colors ${
+                        walletType === 'metamask'
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-border hover:bg-accent'
+                      }`}
+                      onClick={() => setWalletType('metamask')}
+                    >
+                      MetaMask
+                    </button>
+                    <button
+                      className={`px-4 py-3 border transition-colors ${
+                        walletType === 'walletconnect'
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-border hover:bg-accent'
+                      }`}
+                      onClick={() => setWalletType('walletconnect')}
+                    >
+                      WalletConnect
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Wallet Address (Optional - will be auto-filled on connect)</label>
+                  <input
+                    className="w-full px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="0x..."
+                    value={walletAddress}
+                    onChange={(e) => setWalletAddress(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  className="px-6 py-3 bg-foreground text-background font-semibold hover:bg-foreground/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={connectWallet}
+                  disabled={!walletType}
+                >
+                  Connect Wallet
+                </button>
+
+                {walletError && (
+                  <div className="p-4 border border-red-200 bg-red-50 text-red-800 text-sm">
+                    Error: {walletError}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 max-w-3xl">
+                <div className="p-4 border border-green-200 bg-green-50 text-green-800 text-sm">
+                  <div className="font-medium mb-1">Wallet Connected Successfully!</div>
+                  <div className="text-xs">Type: {walletType === 'metamask' ? 'MetaMask' : 'WalletConnect'}</div>
+                  <div className="text-xs font-mono mt-2">{walletAddress}</div>
+                </div>
+
+                <button
+                  className="px-6 py-3 border border-border hover:bg-accent transition-colors font-medium"
+                  onClick={disconnectWallet}
+                >
+                  Disconnect Wallet
+                </button>
+              </div>
+            )}
           </section>
         </div>
       </div>

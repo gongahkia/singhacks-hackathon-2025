@@ -6,21 +6,20 @@ const paymentService = require('../services/payment-service');
 // Create escrow payment
 router.post('/', async (req, res, next) => {
   try {
-    const { payee, amount, description, payer, payerPrivateKey, signedTx, expirationDays } = req.body;
+    const { payee, amount, description, payer, payerPrivateKey, expirationDays } = req.body;
     if (!payee || !amount || !description) {
       return res.status(400).json({ error: 'Payee, amount, and description are required' });
     }
     if (amount <= 0) return res.status(400).json({ error: 'Amount must be greater than 0' });
     
     // Phase 1 (Demo): If payer and payerPrivateKey provided, use agent wallet
-    // Phase 2 (Production): If signedTx provided, use signed transaction
+    // Phase 2 (Production): Will accept signed transactions instead
     const result = await paymentService.createEscrow(
       payee, 
       amount, 
       description,
       payer || null,        // Agent address (optional)
       payerPrivateKey || null, // Agent private key (optional, DEMO ONLY)
-      signedTx || null,     // Signed transaction (optional, Phase 2)
       expirationDays || 0
     );
     res.json(result);

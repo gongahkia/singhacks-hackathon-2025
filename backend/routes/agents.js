@@ -6,13 +6,11 @@ const agentService = require('../services/agent-service');
 // Register a new agent
 router.post('/', async (req, res, next) => {
   try {
-    const { name, capabilities, metadata, signedTx } = req.body;
+    const { name, capabilities, metadata } = req.body;
     if (!name || !capabilities || !Array.isArray(capabilities) || capabilities.length === 0) {
       return res.status(400).json({ error: 'Name and capabilities array are required' });
     }
-    // Phase 2: If signedTx provided, use signed transaction (production mode)
-    // Otherwise use backend wallet (backward compatibility)
-    const result = await agentService.registerAgent(name, capabilities, metadata || '', signedTx || null);
+    const result = await agentService.registerAgent(name, capabilities, metadata || '');
     res.json(result);
   } catch (e) { next(e); }
 });
