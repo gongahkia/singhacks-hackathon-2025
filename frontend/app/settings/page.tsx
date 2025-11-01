@@ -86,7 +86,7 @@ export default function SettingsPage() {
       <nav className="border-b border-border px-12 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🍑</span>
+            <img src="/heracles-icon.jpg" alt="Heracles" className="w-8 h-8 object-contain" />
             <h2 className="text-xl font-semibold">Heracles</h2>
           </div>
           <div className="flex gap-3">
