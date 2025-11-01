@@ -6,11 +6,77 @@ import Link from 'next/link'
 
 type Health = { status: string; timestamp: string; network?: string; version?: string }
 
+type Transaction = {
+  id: string
+  type: string
+  agent: string
+  amount: string
+  status: 'completed' | 'pending' | 'failed'
+  timestamp: string
+  hash?: string
+}
+
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [agents, setAgents] = useState<any[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingAgents, setLoadingAgents] = useState(true)
+  const [transactions] = useState<Transaction[]>([
+    {
+      id: '1',
+      type: 'Agent Registration',
+      agent: 'Trading Bot Alpha',
+      amount: '0.05 HBAR',
+      status: 'completed',
+      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      hash: '0x1234...5678'
+    },
+    {
+      id: '2',
+      type: 'Token Transfer',
+      agent: 'DeFi Manager',
+      amount: '10.00 USDC',
+      status: 'completed',
+      timestamp: new Date(Date.now() - 7200000).toISOString(),
+      hash: '0xabcd...efgh'
+    },
+    {
+      id: '3',
+      type: 'Smart Contract Call',
+      agent: 'NFT Minter',
+      amount: '0.12 HBAR',
+      status: 'pending',
+      timestamp: new Date(Date.now() - 1800000).toISOString(),
+      hash: '0x9876...5432'
+    },
+    {
+      id: '4',
+      type: 'Agent Payment',
+      agent: 'Trading Bot Alpha',
+      amount: '2.50 HBAR',
+      status: 'completed',
+      timestamp: new Date(Date.now() - 10800000).toISOString(),
+      hash: '0xfedc...ba98'
+    },
+    {
+      id: '5',
+      type: 'Token Swap',
+      agent: 'DeFi Manager',
+      amount: '5.00 HBAR',
+      status: 'failed',
+      timestamp: new Date(Date.now() - 14400000).toISOString(),
+      hash: '0x1111...2222'
+    },
+    {
+      id: '6',
+      type: 'NFT Purchase',
+      agent: 'NFT Minter',
+      amount: '15.00 HBAR',
+      status: 'completed',
+      timestamp: new Date(Date.now() - 18000000).toISOString(),
+      hash: '0x3333...4444'
+    }
+  ])
 
   useEffect(() => {
     apiClient.healthCheck().then(setHealth).catch((e: any) => setError(e.message))
@@ -120,6 +186,77 @@ export default function App() {
                 >
                   Register Your Agent
                 </Link>
+              </div>
+            )}
+          </section>
+
+          {/* Agent Transactions Section */}
+          <section className="border border-border p-8 space-y-4">
+            <h2 className="text-lg font-semibold">Agent Transactions</h2>
+            <p className="text-sm text-foreground/60">
+              View all transactions conducted by your AI agents. This includes token transfers, smart contract calls,
+              payments, and other blockchain activities. Each transaction shows the type, agent involved, amount,
+              status, and transaction hash for verification on the blockchain.
+            </p>
+
+            <div className="border border-border overflow-hidden">
+              {/* Table header */}
+              <div className="bg-foreground/5 border-b border-border px-4 py-3">
+                <div className="grid grid-cols-6 gap-4 text-sm font-semibold">
+                  <div>Type</div>
+                  <div>Agent</div>
+                  <div>Amount</div>
+                  <div>Status</div>
+                  <div>Time</div>
+                  <div>Hash</div>
+                </div>
+              </div>
+
+              {/* Scrollable table body */}
+              <div className="max-h-96 overflow-y-auto">
+                {transactions.length > 0 ? (
+                  transactions.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="border-b border-border px-4 py-3 hover:bg-foreground/5 transition-colors"
+                    >
+                      <div className="grid grid-cols-6 gap-4 text-sm">
+                        <div className="font-medium">{tx.type}</div>
+                        <div className="text-foreground/60">{tx.agent}</div>
+                        <div className="font-mono">{tx.amount}</div>
+                        <div>
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded ${
+                              tx.status === 'completed'
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : tx.status === 'pending'
+                                ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                                : 'bg-red-100 text-red-800 border border-red-200'
+                            }`}
+                          >
+                            {tx.status}
+                          </span>
+                        </div>
+                        <div className="text-foreground/60 text-xs">
+                          {new Date(tx.timestamp).toLocaleString()}
+                        </div>
+                        <div className="font-mono text-xs text-foreground/60 truncate">
+                          {tx.hash || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-4 py-8 text-center text-foreground/60">
+                    No transactions yet. Start using agents to see your transaction history.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {transactions.length > 0 && (
+              <div className="text-xs text-foreground/60 pt-2">
+                Showing {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'}
               </div>
             )}
           </section>
