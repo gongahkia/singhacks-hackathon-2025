@@ -58,6 +58,17 @@ export default function ChatPage() {
   const [matchedAgents, setMatchedAgents] = useState<any[]>([])
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [selectedCurrency, setSelectedCurrency] = useState<'HBAR' | 'USDC'>('HBAR')
+  const [paymentAmount, setPaymentAmount] = useState<number>(10)
+
+  // Initialize payment amount when assistant action or selected agent changes
+  useEffect(() => {
+    if (assistantAction?.payload?.amount) {
+      setPaymentAmount(Number(assistantAction.payload.amount) || 10)
+    } else if (!assistantAction && !selectedAgent) {
+      // Reset to default when no payment context
+      setPaymentAmount(10)
+    }
+  }, [assistantAction?.payload?.amount, selectedAgent])
   const [connectedAgent, setConnectedAgent] = useState<any | null>(null)
   const { address: walletAddress, isConnected: walletConnected } = useAccount()
   
@@ -568,7 +579,8 @@ export default function ChatPage() {
             <div className="border-t border-border p-4">
               <PaymentRequest
                 payee={selectedAgent?.address || selectedAgent?.agentAddress || assistantAction?.payload?.payee || assistantAction?.payload?.recipient || ''}
-                amount={assistantAction?.payload?.amount || 10}
+                amount={paymentAmount}
+                onAmountChange={setPaymentAmount}
                 description={selectedAgent ? `Payment to ${selectedAgent.name}` : (assistantAction?.payload?.description || assistantAction?.payload?.purpose)}
                 sellerName={selectedAgent?.name || sellerName}
                 isProcessing={paymentProcessing}
@@ -636,7 +648,7 @@ export default function ChatPage() {
                     // - toAgentId = selectedAgent (Alice - the recipient)
                     // - fromAgentId = The agent paying (Bob if useAgentWallet, or connected agent)
                     const toAgentId = selectedAgent?.agentId || selectedAgent?.address
-                    const paymentAmount = assistantAction?.payload?.amount || 10
+                    // Use the editable payment amount from state
                     
                     if (!toAgentId) {
                       throw new Error('No recipient agent selected for payment')
@@ -775,7 +787,7 @@ export default function ChatPage() {
                         id: recordId,
                         txHash: txHash,
                         escrowId: escrowId,
-                        amountHBAR: Number(assistantAction.payload.amount) || 0,
+                        amountHBAR: paymentAmount || 0,
                         payee: assistantAction.payload.payee || assistantAction.payload.recipient,
                         sellerName: sellerName,
                         description: assistantAction.payload.description || assistantAction.payload.purpose,

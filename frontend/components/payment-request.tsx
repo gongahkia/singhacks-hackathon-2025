@@ -3,6 +3,7 @@
 interface PaymentRequestProps {
   payee: string
   amount: number
+  onAmountChange?: (amount: number) => void
   description?: string
   sellerName?: string
   isProcessing?: boolean
@@ -21,6 +22,7 @@ interface PaymentRequestProps {
 export default function PaymentRequest({ 
   payee, 
   amount, 
+  onAmountChange,
   description, 
   sellerName, 
   isProcessing, 
@@ -158,7 +160,27 @@ export default function PaymentRequest({
             </div>
           <div className="space-y-2">
               <div className="text-sm text-foreground/60">{currency} Amount</div>
-            <div className="text-4xl font-bold">{amount}</div>
+              {confirmed || isProcessing ? (
+                // Display only when processing or confirmed
+                <div className="text-4xl font-bold">{amount}</div>
+              ) : (
+                // Editable input when not processing/confirmed
+                <input
+                  type="number"
+                  min="0"
+                  step="0.00000001"
+                  value={amount}
+                  onChange={(e) => {
+                    const newAmount = parseFloat(e.target.value) || 0
+                    if (newAmount >= 0) {
+                      onAmountChange?.(newAmount)
+                    }
+                  }}
+                  className="text-4xl font-bold bg-transparent border-b-2 border-border focus:border-foreground focus:outline-none w-full pb-2 transition-colors"
+                  placeholder="0.00"
+                  disabled={isProcessing || confirmed}
+                />
+              )}
             </div>
           </div>
         </div>
