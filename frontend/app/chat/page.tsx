@@ -5,12 +5,24 @@ import Link from 'next/link'
 import { Send } from 'lucide-react'
 import PaymentRequest from '@/components/payment-request'
 
+type MessageRole = 'user' | 'assistant' | 'event'
+
 interface Message {
   id: string
-  role: 'user' | 'assistant'
+  role: MessageRole
   content: string
   timestamp: Date
 }
+
+type Breakpoint =
+  | { type: 'marketplace_search_started'; text: string }
+  | { type: 'sellers_found'; text: string; count: number }
+  | { type: 'sellers_ranked'; text: string }
+  | { type: 'seller_confirmed'; text: string; seller?: { name: string; accountId?: string } }
+  | { type: 'seller_verified_ecr8004'; text: string }
+  | { type: 'transaction_details_confirmed'; text: string; quantity?: number; amount?: number }
+  | { type: 'transaction_ready'; text: string }
+  | { type: string; [key: string]: any }
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -26,6 +38,21 @@ export default function ChatPage() {
   const [reasoning, setReasoning] = useState<string[] | null>(null)
   const [assistantAction, setAssistantAction] = useState<any | null>(null)
   const [showPaymentCard, setShowPaymentCard] = useState(false)
+  const [paymentProcessing, setPaymentProcessing] = useState(false)
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false)
+  const [paymentConfirmationText, setPaymentConfirmationText] = useState<string | undefined>(undefined)
+
+  const pushEventCards = (breakpoints: Breakpoint[]) => {
+    if (!Array.isArray(breakpoints) || breakpoints.length === 0) return
+    const now = Date.now()
+    const eventMessages: Message[] = breakpoints.map((bp, i) => ({
+      id: `${now}-bp-${i}`,
+      role: 'event',
+      content: bp.text || '',
+      timestamp: new Date()
+    }))
+    setMessages(prev => [...prev, ...eventMessages])
+  }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,10 +94,16 @@ export default function ChatPage() {
         assistantText = d.message || 'Here are suggested actions.'
         if (d.reasoning) setReasoning(d.reasoning)
         if (d.action) setAssistantAction(d.action)
+        if (Array.isArray(d.breakpoints)) {
+          pushEventCards(d.breakpoints as Breakpoint[])
+        }
 
         // Show payment card if payment confirmation requested
         if (d.action && d.action.type === 'request_confirmation') {
           setShowPaymentCard(true)
+          setPaymentProcessing(false)
+          setPaymentConfirmed(false)
+          setPaymentConfirmationText(undefined)
         }
       } else {
         assistantText = 'No response from assistant.'
@@ -182,8 +215,22 @@ export default function ChatPage() {
                 payee={assistantAction.payload.payee || assistantAction.payload.recipient}
                 amount={assistantAction.payload.amount}
                 description={assistantAction.payload.description || assistantAction.payload.purpose}
+                isProcessing={paymentProcessing}
+                confirmed={paymentConfirmed}
+                confirmationText={paymentConfirmationText}
                 onSendClick={async () => {
                   try {
+                    setPaymentProcessing(true)
+                    // Add transaction start breakpoint card
+                    setMessages(prev => [
+                      ...prev,
+                      {
+                        id: `${Date.now()}-tx-start`,
+                        role: 'event',
+                        content: 'Initiating transaction on Hedera...',
+                        timestamp: new Date()
+                      }
+                    ])
                     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
                     const pResp = await fetch(`${backendUrl}/api/payments`, {
                       method: 'POST',
@@ -195,15 +242,35 @@ export default function ChatPage() {
                       })
                     })
                     const pData = await pResp.json()
+
+                    const success = !pData.error
+                    const text = success ? 'Transaction submitted to Hedera network.' : `Payment failed: ${pData.error || 'Unknown error'}`
+                    setPaymentConfirmed(success)
+                    setPaymentConfirmationText(text)
+                    setPaymentProcessing(false)
+
+                    // Add transaction result breakpoint card
+                    setMessages(prev => [
+                      ...prev,
+                      {
+                        id: `${Date.now()}-tx-result`,
+                        role: 'event',
+                        content: success ? 'Transaction confirmed.' : 'Transaction failed.',
+                        timestamp: new Date()
+                      }
+                    ])
+
                     const confirmMsg: Message = {
                       id: (Date.now() + 2).toString(),
                       role: 'assistant',
-                      content: pData.error ? 'Payment failed: ' + (pData.error || JSON.stringify(pData)) : 'Payment initiated successfully',
+                      content: success ? 'Payment initiated successfully' : 'Payment failed: ' + (pData.error || JSON.stringify(pData)),
                       timestamp: new Date()
                     }
                     setMessages(prev => [...prev, confirmMsg])
-                    setShowPaymentCard(false)
                   } catch (err: any) {
+                    setPaymentProcessing(false)
+                    setPaymentConfirmed(false)
+                    setPaymentConfirmationText('Payment request failed.')
                     const errMsg: Message = {
                       id: (Date.now() + 3).toString(),
                       role: 'assistant',
@@ -216,13 +283,19 @@ export default function ChatPage() {
               />
             </div>
           )}
-
-          {/* Input area */}
-          <form onSubmit={handleSendMessage} className="border-t border-border p-4">
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={input}
+                <div
+                  className={`${
+                    message.role === 'event'
+                      ? 'max-w-[60%] text-center font-semibold border-2 border-foreground bg-foreground/5'
+                      : 'max-w-[70%]'
+                  } px-4 py-3 ${
+                    message.role === 'user'
+                      ? 'bg-foreground text-background'
+                      : message.role === 'assistant'
+                        ? 'bg-foreground/5 border border-border'
+                        : ''
+                  }`}
+                >
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask me anything about AI agents, blockchain, or this platform..."
                 className="flex-1 px-4 py-3 border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
