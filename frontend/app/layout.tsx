@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { WalletProvider } from "../components/wallet-provider"
 import "./globals.css"
 
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"] })
@@ -20,8 +21,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${jetbrainsMono.className} font-mono antialiased`}>
-        {children}
-        <Analytics />
+        <WalletProvider>
+          {children}
+          <Analytics />
+        </WalletProvider>
       </body>
     </html>
   )

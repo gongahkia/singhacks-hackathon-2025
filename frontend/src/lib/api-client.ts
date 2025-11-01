@@ -61,5 +61,64 @@ export const apiClient = {
       throw new Error(msg)
     }
     return res.json()
+  },
+
+  // Phase 2: Transaction endpoints
+  async prepareTransaction(params: { to: string; data: string; value?: string; from?: string }) {
+    const res = await fetch(url('/api/transactions/prepare'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      const msg = (data && (data.error || data.message)) || 'Failed to prepare transaction'
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+
+  async sendSignedTransaction(signedTx: string) {
+    const res = await fetch(url('/api/transactions/send'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signedTx })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      const msg = (data && (data.error || data.message)) || 'Failed to send transaction'
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+
+  // Phase 2: Register agent with signed transaction
+  async registerAgentWithSignedTx(params: { name: string; capabilities: string[]; metadata?: string; signedTx: string }) {
+    const res = await fetch(url('/api/agents'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...params, signedTx: params.signedTx })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      const msg = (data && (data.error || data.message)) || 'Failed to register agent'
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+
+  // Phase 2: Create payment escrow with signed transaction
+  async createEscrowWithSignedTx(params: { payee: string; amount: number; description: string; signedTx: string; expirationDays?: number }) {
+    const res = await fetch(url('/api/payments'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...params, signedTx: params.signedTx })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      const msg = (data && (data.error || data.message)) || 'Failed to create escrow'
+      throw new Error(msg)
+    }
+    return res.json()
   }
 }

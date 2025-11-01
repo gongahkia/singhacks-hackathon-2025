@@ -58,14 +58,14 @@ class ReputationService {
       // HCS logging is mandatory - ensure topic exists
       const agentTopicId = await hederaClient.ensureTopic('AGENT_TOPIC_ID', 'Agent', 'Agent registration events');
       await hederaClient.submitMessage(agentTopicId, JSON.stringify({
-        event: 'ReputationFeedbackSubmitted',
-        fromAgent,
-        toAgent,
-        rating,
-        paymentTxHash,
-        txHash: receipt.hash,
-        timestamp: new Date().toISOString()
-      }));
+          event: 'ReputationFeedbackSubmitted',
+          fromAgent,
+          toAgent,
+          rating,
+          paymentTxHash,
+          txHash: receipt.hash,
+          timestamp: new Date().toISOString()
+        }));
 
       return {
         success: true,
@@ -119,13 +119,13 @@ class ReputationService {
       // HCS logging is mandatory - ensure topic exists
       const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
       await hederaClient.submitMessage(paymentTopicId, JSON.stringify({
-        event: 'TrustEstablishedFromPayment',
-        agent1,
-        agent2,
-        transactionHash,
-        txHash: receipt.hash,
-        timestamp: new Date().toISOString()
-      }));
+          event: 'TrustEstablishedFromPayment',
+          agent1,
+          agent2,
+          transactionHash,
+          txHash: receipt.hash,
+          timestamp: new Date().toISOString()
+        }));
 
       return {
         success: true,

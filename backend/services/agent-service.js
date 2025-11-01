@@ -40,21 +40,52 @@ class AgentService {
     this.agentRegistry = new ethers.Contract(address, AgentRegistryABI, this.wallet);
   }
 
-  async registerAgent(name, capabilities, metadata = '') {
-    this.ensureContract();
-    const tx = await this.agentRegistry.registerAgent(name, capabilities, metadata);
-    const receipt = await tx.wait();
+  /**
+   * Register a new agent
+   * @param {string} name - Agent name
+   * @param {string[]} capabilities - Agent capabilities array
+   * @param {string} [metadata] - Optional metadata
+   * @param {string} [signedTx] - Signed transaction hex (Phase 2 production mode)
+   * @returns {Promise<Object>} Registration result
+   */
+  async registerAgent(name, capabilities, metadata = '', signedTx = null) {
+    if (signedTx) {
+      // Phase 2: Use signed transaction from user wallet
+      const transactionService = require('./transaction-service');
+      const receiptData = await transactionService.sendSignedTransaction(signedTx);
+      
+      // Extract agent address from transaction
+      this.ensureProvider();
+      const tx = await this.provider.getTransaction(receiptData.txHash);
+      const agentAddress = tx.from;
 
-    // HCS logging is mandatory - ensure topic exists
-    const agentTopicId = await hederaClient.ensureTopic('AGENT_TOPIC_ID', 'Agent', 'Agent registration events');
-    await hederaClient.submitMessage(agentTopicId, JSON.stringify({
-      event: 'AgentRegistered',
-      agent: this.wallet.address,
-      name,
-      capabilities,
-      timestamp: new Date().toISOString()
-    }));
-    return { success: true, txHash: receipt.hash, agentAddress: this.wallet.address };
+      // HCS logging is mandatory - ensure topic exists
+      const agentTopicId = await hederaClient.ensureTopic('AGENT_TOPIC_ID', 'Agent', 'Agent registration events');
+      await hederaClient.submitMessage(agentTopicId, JSON.stringify({
+        event: 'AgentRegistered',
+        agent: agentAddress,
+        name,
+        capabilities,
+        timestamp: new Date().toISOString()
+      }));
+      return { success: true, txHash: receiptData.txHash, agentAddress };
+    } else {
+      // Use backend wallet (default behavior for backward compatibility)
+      this.ensureContract();
+      const tx = await this.agentRegistry.registerAgent(name, capabilities, metadata);
+      const receipt = await tx.wait();
+
+      // HCS logging is mandatory - ensure topic exists
+      const agentTopicId = await hederaClient.ensureTopic('AGENT_TOPIC_ID', 'Agent', 'Agent registration events');
+      await hederaClient.submitMessage(agentTopicId, JSON.stringify({
+        event: 'AgentRegistered',
+        agent: this.wallet.address,
+        name,
+        capabilities,
+        timestamp: new Date().toISOString()
+      }));
+      return { success: true, txHash: receipt.hash, agentAddress: this.wallet.address };
+    }
   }
 
   async getAgent(agentAddress) {

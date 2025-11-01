@@ -43,11 +43,12 @@ class PaymentService {
    * @param {number|string} amountInHbar - Amount in HBAR
    * @param {string} description - Service description
    * @param {string} [payerAgentAddress] - Payer agent address (must be registered). If not provided, uses backend wallet.
-   * @param {string} [payerPrivateKey] - Payer's EVM private key (required if payerAgentAddress is provided)
+   * @param {string} [payerPrivateKey] - Payer's EVM private key (Phase 1 demo mode only)
+   * @param {string} [signedTx] - Signed transaction hex (Phase 2 production mode)
    * @param {number} [expirationDays] - Escrow expiration days (default: 30)
    * @returns {Promise<Object>} Escrow creation result
    */
-  async createEscrow(payee, amountInHbar, description, payerAgentAddress = null, payerPrivateKey = null, expirationDays = 0) {
+  async createEscrow(payee, amountInHbar, description, payerAgentAddress = null, payerPrivateKey = null, signedTx = null, expirationDays = 0) {
     // If payer agent address provided, verify agent is registered and use their wallet
     let walletToUse = null;
     let contractToUse = null;
@@ -88,6 +89,39 @@ class PaymentService {
         }
         throw error;
       }
+    } else if (signedTx) {
+      // Phase 2: Use signed transaction from user wallet
+      const transactionService = require('./transaction-service');
+      const receiptData = await transactionService.sendSignedTransaction(signedTx);
+      
+      // Extract escrow ID from receipt logs if possible
+      // Note: We'll need the contract address to parse logs
+      const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+      this.ensureProvider();
+      const receipt = await this.provider.getTransactionReceipt(receiptData.txHash);
+      
+      let escrowId = undefined;
+      if (address && PaymentProcessorABI && PaymentProcessorABI.length > 0) {
+        try {
+          const contract = new ethers.Contract(address, PaymentProcessorABI);
+          const log = receipt.logs.find(l => {
+            try { return contract.interface.parseLog(l).name === 'EscrowCreated'; } catch { return false; }
+          });
+          if (log) {
+            escrowId = contract.interface.parseLog(log).args.escrowId;
+            // Get payer from transaction
+            const tx = await this.provider.getTransaction(receiptData.txHash);
+            payerAddress = tx.from;
+          }
+        } catch {}
+      }
+
+      // HCS logging is mandatory - ensure topic exists
+      const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
+      await hederaClient.submitMessage(paymentTopicId, JSON.stringify({
+        event: 'EscrowCreated', escrowId, payer: payerAddress, payee, amount: amountInHbar, timestamp: new Date().toISOString()
+      }));
+      return { success: true, escrowId, txHash: receiptData.txHash, amount: amountInHbar, payer: payerAddress };
     } else {
       // Use backend wallet (default behavior for backward compatibility)
       this.ensureContract();
@@ -115,7 +149,7 @@ class PaymentService {
     const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
     await hederaClient.submitMessage(paymentTopicId, JSON.stringify({
       event: 'EscrowCreated', escrowId, payer: payerAddress, payee, amount: amountInHbar, timestamp: new Date().toISOString()
-    }));
+      }));
     return { success: true, escrowId, txHash: receipt.hash, amount: amountInHbar, payer: payerAddress };
   }
 
@@ -172,12 +206,12 @@ class PaymentService {
       this.ensureContract();
       contractToUse = this.paymentProcessor;
     }
-
+    
     // Convert escrowId to bytes32 format if it's a string
-    const escrowIdBytes = ethers.isHexString(escrowId)
-      ? escrowId
+    const escrowIdBytes = ethers.isHexString(escrowId) 
+      ? escrowId 
       : ethers.id(escrowId);
-
+    
     const tx = await contractToUse.releaseEscrow(escrowIdBytes);
     const receipt = await tx.wait();
     
@@ -197,20 +231,20 @@ class PaymentService {
     // HCS logging is mandatory - ensure topic exists
     const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
     await hederaClient.submitMessage(paymentTopicId, JSON.stringify({ 
-      event: 'EscrowReleased', 
-      escrowId, 
-      payer: escrow.payer,
-      payee: escrow.payee,
-      timestamp: new Date().toISOString() 
-    }));
+        event: 'EscrowReleased', 
+        escrowId, 
+        payer: escrow.payer,
+        payee: escrow.payee,
+        timestamp: new Date().toISOString() 
+      }));
     return { success: true, txHash: receipt.hash };
   }
 
   async refundEscrow(escrowId) {
     this.ensureContract();
     // Convert escrowId to bytes32 format if needed
-    const escrowIdBytes = ethers.isHexString(escrowId)
-      ? escrowId
+    const escrowIdBytes = ethers.isHexString(escrowId) 
+      ? escrowId 
       : ethers.id(escrowId);
     const tx = await this.paymentProcessor.refundEscrow(escrowIdBytes);
     const receipt = await tx.wait();
@@ -220,8 +254,8 @@ class PaymentService {
   async getEscrow(escrowId) {
     this.ensureContract();
     // Convert escrowId to bytes32 format if needed
-    const escrowIdBytes = ethers.isHexString(escrowId)
-      ? escrowId
+    const escrowIdBytes = ethers.isHexString(escrowId) 
+      ? escrowId 
       : ethers.id(escrowId);
     const e = await this.paymentProcessor.getEscrow(escrowIdBytes);
     return {

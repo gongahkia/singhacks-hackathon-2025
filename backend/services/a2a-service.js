@@ -120,15 +120,15 @@ class A2AService {
       // HCS logging is mandatory - ensure topic exists
       const a2aTopicId = await hederaClient.ensureTopic('A2A_TOPIC_ID', 'A2A', 'Agent-to-agent communication events');
       await hederaClient.submitMessage(a2aTopicId, JSON.stringify({
-        event: 'A2ACommunicationInitiated',
-        interactionId,
-        fromAgent,
-        toAgent,
-        capability,
-        trustScoreFrom: fromAgentData.trustScore,
-        trustScoreTo: toAgentData.trustScore,
-        timestamp: new Date().toISOString()
-      }));
+          event: 'A2ACommunicationInitiated',
+          interactionId,
+          fromAgent,
+          toAgent,
+          capability,
+          trustScoreFrom: fromAgentData.trustScore,
+          trustScoreTo: toAgentData.trustScore,
+          timestamp: new Date().toISOString()
+        }));
 
       return {
         success: true,
@@ -188,12 +188,12 @@ class A2AService {
       // HCS logging is mandatory - ensure topic exists
       const a2aTopicId = await hederaClient.ensureTopic('A2A_TOPIC_ID', 'A2A', 'Agent-to-agent communication events');
       await hederaClient.submitMessage(a2aTopicId, JSON.stringify({
-        event: 'A2ACommunicationCompleted',
-        interactionId,
-        fromAgent: interaction.fromAgent,
-        toAgent: interaction.toAgent,
-        timestamp: new Date().toISOString()
-      }));
+          event: 'A2ACommunicationCompleted',
+          interactionId,
+          fromAgent: interaction.fromAgent,
+          toAgent: interaction.toAgent,
+          timestamp: new Date().toISOString()
+        }));
 
       return {
         success: true,
