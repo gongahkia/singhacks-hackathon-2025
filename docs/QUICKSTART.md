@@ -176,7 +176,7 @@ hedera-agent-economy/
 │   ├── src/
 │   │   ├── AgentRegistry.sol
 │   │   └── PaymentProcessor.sol
-│   ├── scripts/deploy.js
+│   ├── deploy/deploy.js
 │   └── hardhat.config.js
 │
 ├── backend/                # 🟢 Web2 Dev (Dev 2)
@@ -276,7 +276,7 @@ Run: `node test-hedera.js`
 # Contracts
 cd contracts
 npx hardhat compile
-npx hardhat run scripts/deploy.js --network hedera_testnet
+npx hardhat run deploy/deploy.js --network hedera_testnet
 
 # Backend
 cd backend
@@ -344,7 +344,7 @@ npm install
 ### "Contract not deployed"
 ```bash
 cd contracts
-npx hardhat run scripts/deploy.js --network hedera_testnet
+npx hardhat run deploy/deploy.js --network hedera_testnet
 # Copy addresses to backend/deployment.json
 ```
 
