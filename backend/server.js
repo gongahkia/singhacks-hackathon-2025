@@ -10,6 +10,7 @@ const x402Routes = require('./routes/x402');
 const tokenRoutes = require('./routes/tokens');
 const authRoutes = require('./routes/auth');
 const errorHandler = require('./utils/error-handler');
+const { version } = require('./package.json');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,7 +40,7 @@ app.get('/api/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     network: process.env.HEDERA_NETWORK,
-    version: '1.0.0'
+    version
   });
 });
 
