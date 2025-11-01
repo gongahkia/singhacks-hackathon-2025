@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import PaymentRequest from "@/components/payment-request"
 import ProcessingScreen from "@/components/processing-screen"
 import ResultScreen from "@/components/result-screen"
@@ -120,18 +121,33 @@ export default function Home() {
   }
 
   return (
-    <main className="flex h-screen gap-12 p-12">
-      {/* Main Content */}
-      <div className="flex-1">
-        {currentScreen === "request" && <PaymentRequest onSendClick={handleSendPayment} />}
-        {currentScreen === "processing" && <ProcessingScreen />}
-        {currentScreen === "result" && resultData && <ResultScreen data={resultData} onNewPayment={handleNewPayment} />}
-      </div>
+    <div className="min-h-screen">
+      {/* Header Navigation */}
+      <nav className="border-b border-border px-12 py-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Web3 Payment</h2>
+          <Link
+            href="/marketplace"
+            className="px-4 py-2 border border-border hover:bg-accent transition-colors text-sm font-medium"
+          >
+            Agent Marketplace
+          </Link>
+        </div>
+      </nav>
 
-      {/* Sidebar - Transaction History */}
-      <aside className="w-80 border-l border-border pl-12">
-        <TransactionHistory transactions={transactions} />
-      </aside>
-    </main>
+      <main className="flex gap-12 p-12" style={{ height: 'calc(100vh - 73px)' }}>
+        {/* Main Content */}
+        <div className="flex-1">
+          {currentScreen === "request" && <PaymentRequest onSendClick={handleSendPayment} />}
+          {currentScreen === "processing" && <ProcessingScreen />}
+          {currentScreen === "result" && resultData && <ResultScreen data={resultData} onNewPayment={handleNewPayment} />}
+        </div>
+
+        {/* Sidebar - Transaction History */}
+        <aside className="w-80 border-l border-border pl-12">
+          <TransactionHistory transactions={transactions} />
+        </aside>
+      </main>
+    </div>
   )
 }
