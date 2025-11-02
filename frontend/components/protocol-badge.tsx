@@ -40,16 +40,17 @@ export function ProtocolBadge({ protocol, size = 'md' }: ProtocolBadgeProps) {
     lg: 'text-base px-4 py-2'
   }
   
+  const hasUrl = (info as any).url
   return (
     <Badge 
       variant="outline" 
-      className={`${sizeClasses[size]} flex items-center gap-1.5 border-blue-500 text-blue-600`}
+      className={`${sizeClasses[size]} flex items-center gap-1.5 border-border text-foreground rounded-none`}
     >
       <Icon className="w-3 h-3" />
       <span>{info.name}</span>
-      {info.url && (
+      {hasUrl && (
         <a 
-          href={info.url} 
+          href={(info as any).url} 
           target="_blank" 
           rel="noopener noreferrer"
           className="hover:underline"
@@ -64,7 +65,7 @@ export function ProtocolBadge({ protocol, size = 'md' }: ProtocolBadgeProps) {
 
 export function ProtocolInfoPanel() {
   return (
-    <div className="border border-blue-500 bg-blue-50 dark:bg-blue-950 p-4 rounded-lg space-y-3">
+    <div className="border border-border bg-background p-4 rounded-none space-y-3">
       <h3 className="font-semibold text-sm">Protocols Used</h3>
       <div className="flex flex-wrap gap-2">
         <ProtocolBadge protocol="erc8004" />

@@ -17,6 +17,8 @@ interface Agent {
   isActive: boolean
   agentId?: string
   erc8004AgentId?: string | null
+  paymentMode?: 'permissioned' | 'permissionless'
+  agentWalletAddress?: string | null
 }
 
 interface HybridTrust {
@@ -109,7 +111,7 @@ export default function MarketplacePage() {
           <div className="mt-6">
             <Link
               href="/deploy-agent"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white hover:bg-blue-700 transition-colors rounded-lg"
+              className="inline-flex items-center gap-2 px-6 py-3 border border-border hover:bg-accent transition-colors text-sm font-medium rounded-none"
             >
               <span>+</span>
               <span>Register New Agent</span>
@@ -175,7 +177,7 @@ export default function MarketplacePage() {
             </div>
             <button
               onClick={fetchAgents}
-              className="mt-6 px-6 py-3 bg-red-600 text-white hover:bg-red-700 transition-colors"
+              className="mt-6 px-6 py-3 border border-border hover:bg-accent transition-colors text-sm font-medium rounded-none"
             >
               Retry
             </button>

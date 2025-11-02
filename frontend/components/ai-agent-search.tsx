@@ -69,7 +69,7 @@ export function AIAgentSearch() {
             className="pl-10"
           />
         </div>
-        <Button onClick={handleSearch} disabled={loading}>
+        <Button onClick={handleSearch} disabled={loading} className="rounded-none border border-border bg-background hover:bg-accent text-foreground">
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -106,7 +106,7 @@ export function AIAgentSearch() {
               <Link
                 key={agent.address}
                 href={`/marketplace/${agent.address}`}
-                className="border border-border p-4 rounded-lg hover:shadow-lg transition-all hover:border-blue-500"
+                className="border border-border p-4 rounded-none hover:shadow-lg transition-all hover:border-foreground/50"
               >
                 <div className="space-y-3">
                   {/* Agent Header */}
@@ -137,9 +137,9 @@ export function AIAgentSearch() {
                   {/* AI Relevance Score */}
                   {agent.relevanceScore !== undefined && (
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-muted rounded-full h-2">
+                      <div className="flex-1 bg-muted rounded-none h-2">
                         <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          className="bg-foreground h-2 transition-all"
                           style={{ width: `${agent.relevanceScore * 100}%` }}
                         />
                       </div>
