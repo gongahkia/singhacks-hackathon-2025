@@ -71,7 +71,7 @@ async function seedDemoAgents() {
         paymentMode: agent.paymentMode,
         agentPrivateKey: agent.privateKey
       }, {
-        timeout: 30000
+        timeout: 60000
       });
       
       console.log(`✅ Registered: ${agent.name} (${agent.agentId})`);

@@ -11,11 +11,15 @@ import { ConnectAgentWallet } from "@/components/connect-agent-wallet"
 interface Agent {
   name: string
   address: string
+  agentId?: string
+  erc8004AgentId?: string
   capabilities: string[]
   metadata: string
   trustScore: string
   registeredAt: string
   isActive: boolean
+  paymentMode?: string
+  agentWalletAddress?: string
 }
 
 interface PageProps {
@@ -49,11 +53,11 @@ export default function AgentDetailPage({ params }: PageProps) {
   }, [showTimeline, pollingActive, agent])
 
   useEffect(() => {
-    if (agent) {
+    if (agent?.address) {
       fetchHybridTrust()
       fetchConnectedWallets()
     }
-  }, [agent])
+  }, [agent?.address])
 
   const fetchConnectedWallets = async () => {
     try {
@@ -85,10 +89,22 @@ export default function AgentDetailPage({ params }: PageProps) {
     try {
       const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const res = await fetch(`${BASE_URL}/api/reputation/agents/${agent?.address}/hybrid-trust`)
+      if (!res.ok) {
+        console.warn('Failed to fetch hybrid trust:', res.status, res.statusText)
+        setHybridTrust(null)
+        return
+      }
       const data = await res.json()
-      setHybridTrust(data)
+      // Validate the response structure before setting
+      if (data && typeof data === 'object' && ('final' in data || 'hybrid' in data)) {
+        setHybridTrust(data)
+      } else {
+        console.warn('Invalid hybrid trust response structure:', data)
+        setHybridTrust(null)
+      }
     } catch (error) {
       console.error('Failed to fetch hybrid trust:', error)
+      setHybridTrust(null)
     }
   }
 
@@ -97,15 +113,30 @@ export default function AgentDetailPage({ params }: PageProps) {
     setError(null)
     try {
       const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const res = await fetch(`${BASE_URL}/api/agents/${id}`)
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error('Agent not found')
+      
+      // Try to fetch by agentId first (newer approach)
+      let agent = null
+      try {
+        const byIdRes = await fetch(`${BASE_URL}/api/agents/by-id/${id}`)
+        if (byIdRes.ok) {
+          agent = await byIdRes.json()
         }
-        throw new Error('Failed to fetch agent from backend')
+      } catch (e) {
+        // Fallback to address lookup
       }
-      const data = await res.json()
-      setAgent(data)
+      
+      // If not found by agentId, try by address
+      if (!agent) {
+        const res = await fetch(`${BASE_URL}/api/agents/${id}`)
+        if (!res.ok) {
+          if (res.status === 404) {
+            throw new Error('Agent not found')
+          }
+          throw new Error('Failed to fetch agent from backend')
+        }
+        agent = await res.json()
+      }
+      setAgent(agent)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -455,17 +486,31 @@ export default function AgentDetailPage({ params }: PageProps) {
                   </div>
                   {hybridTrust ? (
                     <div className="space-y-2">
-                      <div className="text-2xl font-bold">{hybridTrust.final || hybridTrust.hybrid}</div>
+                      <div className="text-2xl font-bold">{hybridTrust.final || hybridTrust.hybrid || 0}</div>
                       <div className="text-xs text-muted-foreground space-y-1">
-                        <div>Custom: {hybridTrust.custom} ({Math.round(hybridTrust.weights.custom * 100)}%)</div>
-                        <div>ERC-8004: {hybridTrust.official} ({Math.round(hybridTrust.weights.official * 100)}%)</div>
+                        {hybridTrust.weights?.custom !== undefined && (
+                          <div>Custom: {hybridTrust.custom ?? 0} ({Math.round((hybridTrust.weights.custom || 0) * 100)}%)</div>
+                        )}
+                        {hybridTrust.weights?.official !== undefined && (
+                          <div>ERC-8004: {hybridTrust.official ?? 0} ({Math.round((hybridTrust.weights.official || 0) * 100)}%)</div>
+                        )}
                         {hybridTrust.officialFeedbackCount > 0 && (
                           <div className="text-green-600">{hybridTrust.officialFeedbackCount} official reviews</div>
+                        )}
+                        {hybridTrust.breakdown && (
+                          <>
+                            {hybridTrust.breakdown.transactionSuccess && (
+                              <div>Tx Success: {Math.round(hybridTrust.breakdown.transactionSuccess.rate || 0)}% ({Math.round((hybridTrust.breakdown.transactionSuccess.weight || 0) * 100)}%)</div>
+                            )}
+                            {hybridTrust.breakdown.paymentCompletion && (
+                              <div>Payment: {Math.round(hybridTrust.breakdown.paymentCompletion.rate || 0)}% ({Math.round((hybridTrust.breakdown.paymentCompletion.weight || 0) * 100)}%)</div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
                   ) : (
-                  <span className="text-base font-medium">{agent.trustScore}</span>
+                  <span className="text-base font-medium">{agent.trustScore || 0}</span>
                   )}
                 </div>
 

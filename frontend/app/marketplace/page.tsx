@@ -194,8 +194,8 @@ export default function MarketplacePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredAgents.map(agent => (
               <Link
-                key={agent.address}
-                href={`/marketplace/${agent.address}`}
+                key={agent.agentId || agent.address}
+                href={`/marketplace/${agent.agentId || agent.address}`}
                 className="border border-border p-6 hover:border-foreground/40 transition-all hover:shadow-lg group"
               >
                 {/* Agent Header */}

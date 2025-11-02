@@ -33,15 +33,42 @@ router.post('/register-agent', async (req, res, next) => {
     const uniqueAgentId = agentId || `agent-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
     
     // Register using service wallet
-    const result = await agentService.registerAgentWithoutWallet(
-      uniqueAgentId,
-      name,
-      capabilities,
-      metadata || '',
-      null, // signedTx
-      validPaymentMode,
-      agentPrivateKey || null
-    );
+    let result;
+    try {
+      result = await agentService.registerAgentWithoutWallet(
+        uniqueAgentId,
+        name,
+        capabilities,
+        metadata || '',
+        null, // signedTx
+        validPaymentMode,
+        agentPrivateKey || null
+      );
+    } catch (regError) {
+      // Only fail if agent is fully registered with ERC-8004
+      if (regError.message && regError.message.includes('already registered') && regError.message.includes('ERC-8004')) {
+        return res.status(400).json({ error: regError.message });
+      }
+      // For other errors, check if agent exists in mapping (might have been partially registered)
+      const AgentServiceClass = Object.getPrototypeOf(agentService).constructor;
+      if (AgentServiceClass.agentIdMapping && AgentServiceClass.agentIdMapping.has(uniqueAgentId)) {
+        const existing = AgentServiceClass.agentIdMapping.get(uniqueAgentId);
+        console.log(`⚠️  Registration error but agent exists in mapping, returning existing data for ${uniqueAgentId}`);
+        return res.json({
+          success: true,
+          agentId: uniqueAgentId,
+          name: existing.name,
+          capabilities: existing.capabilities,
+          registeredAddress: existing.registeredAddress,
+          paymentMode: existing.paymentMode,
+          agentWalletAddress: existing.agentWalletAddress,
+          erc8004AgentId: existing.erc8004AgentId,
+          message: 'Agent already exists, returning existing data'
+        });
+      }
+      // If not in mapping and error occurred, re-throw
+      throw regError;
+    }
     
     res.json({
       success: true,
@@ -54,9 +81,7 @@ router.post('/register-agent', async (req, res, next) => {
       ...result
     });
   } catch (e) { 
-    if (e.message && e.message.includes('Already registered')) {
-      return res.status(400).json({ error: e.message });
-    }
+    // Final error handler
     next(e); 
   }
 });
@@ -79,6 +104,14 @@ router.get('/', async (_req, res, next) => {
   try {
     // Use getAllAgentsWithIds to include agents from agentIdMapping
     const agents = await agentService.getAllAgentsWithIds();
+    
+    // Debug logging
+    const AgentServiceClass = Object.getPrototypeOf(agentService).constructor;
+    console.log(`📊 GET /api/agents - Returning ${agents.length} agents`);
+    console.log(`   Backend agentIdMapping size: ${AgentServiceClass.agentIdMapping?.size || 0}`);
+    console.log(`   Backend walletKeys size: ${AgentServiceClass.agentWalletKeys?.size || 0}`);
+    console.log(`   Backend erc8004Mapping size: ${AgentServiceClass.erc8004AgentIdMapping?.size || 0}`);
+    
     res.json({ agents, count: agents.length });
   } catch (e) { next(e); }
 });

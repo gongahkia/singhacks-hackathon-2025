@@ -4,12 +4,55 @@ const hederaClient = require('./hedera-client');
 
 let PaymentProcessorABI;
 let deploymentInfo;
+const path = require('path');
+const fs = require('fs');
+
+// Try to load PaymentProcessor ABI
 try {
   PaymentProcessorABI = require('../../contracts/artifacts/src/PaymentProcessor.sol/PaymentProcessor.json').abi;
-  deploymentInfo = require('../../contracts/deployment.json');
-} catch (_e) {
+  console.log('[payment-service] ✓ PaymentProcessor ABI loaded');
+} catch (e) {
+  console.warn('[payment-service] ⚠ PaymentProcessor ABI not found:', e.message);
   PaymentProcessorABI = [];
-  deploymentInfo = { contracts: { PaymentProcessor: process.env.PAYMENT_PROCESSOR_ADDRESS || '0x0000000000000000000000000000000000000000' } };
+}
+
+// Load deployment.json with explicit path resolution
+const deploymentPath = path.resolve(__dirname, '../../contracts/deployment.json');
+console.log('[payment-service] Looking for deployment.json at:', deploymentPath);
+
+if (fs.existsSync(deploymentPath)) {
+  try {
+    deploymentInfo = require(deploymentPath);
+    const paymentProcessorAddress = deploymentInfo?.contracts?.PaymentProcessor;
+    if (paymentProcessorAddress) {
+      console.log('[payment-service] ✓ PaymentProcessor address loaded from deployment.json:', paymentProcessorAddress);
+    } else {
+      console.warn('[payment-service] ⚠ deployment.json exists but PaymentProcessor address not found');
+      deploymentInfo = { contracts: { PaymentProcessor: process.env.PAYMENT_PROCESSOR_ADDRESS || null } };
+    }
+  } catch (e) {
+    console.error('[payment-service] ✗ Error reading deployment.json:', e.message);
+    deploymentInfo = { contracts: { PaymentProcessor: process.env.PAYMENT_PROCESSOR_ADDRESS || null } };
+  }
+} else {
+  console.warn('[payment-service] ⚠ deployment.json not found at:', deploymentPath);
+  console.warn('[payment-service] Current working directory:', process.cwd());
+  console.warn('[payment-service] __dirname:', __dirname);
+  deploymentInfo = { contracts: { PaymentProcessor: process.env.PAYMENT_PROCESSOR_ADDRESS || null } };
+}
+
+// Final check - log what we have
+if (process.env.PAYMENT_PROCESSOR_ADDRESS) {
+  console.log('[payment-service] PAYMENT_PROCESSOR_ADDRESS env var set:', process.env.PAYMENT_PROCESSOR_ADDRESS);
+}
+
+const finalAddress = (deploymentInfo?.contracts?.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+if (finalAddress && finalAddress !== 'null' && finalAddress !== '0x0000000000000000000000000000000000000000') {
+  console.log('[payment-service] ✓ PaymentProcessor address configured:', finalAddress);
+} else {
+  console.error('[payment-service] ✗ PaymentProcessor address NOT configured!');
+  console.error('[payment-service]   - deploymentInfo.contracts.PaymentProcessor:', deploymentInfo?.contracts?.PaymentProcessor);
+  console.error('[payment-service]   - PAYMENT_PROCESSOR_ADDRESS env:', process.env.PAYMENT_PROCESSOR_ADDRESS);
 }
 
 class PaymentService {
@@ -27,12 +70,31 @@ class PaymentService {
       throw new Error('EVM_PRIVATE_KEY must be set (hex 0x...) for ethers operations');
     }
     this.wallet = new ethers.Wallet(EVM_PRIVATE_KEY, this.provider);
-    const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
-    if (!address || address === '0x0000000000000000000000000000000000000000') {
-      throw new Error('PaymentProcessor address not configured. Provide contracts artifacts or set PAYMENT_PROCESSOR_ADDRESS');
+    const address = (deploymentInfo?.contracts?.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+    if (!address || address === '0x0000000000000000000000000000000000000000' || address === 'null') {
+      console.error('[payment-service] PaymentProcessor address lookup failed in ensureContract()');
+      console.error('[payment-service] deploymentInfo:', JSON.stringify(deploymentInfo, null, 2));
+      console.error('[payment-service] PAYMENT_PROCESSOR_ADDRESS env:', process.env.PAYMENT_PROCESSOR_ADDRESS);
+      throw new Error('PaymentProcessor address not configured. Check contracts/deployment.json or set PAYMENT_PROCESSOR_ADDRESS env variable');
     }
     if (!PaymentProcessorABI || PaymentProcessorABI.length === 0) {
-      throw new Error('PaymentProcessor ABI not found. Ensure artifacts are built at contracts/artifacts');
+      console.warn('[payment-service] ⚠ PaymentProcessor ABI not found. Using minimal ABI based on contract interface.');
+      console.warn('[payment-service] To fix properly: Run `cd contracts && npm install && npx hardhat compile`');
+      // Create minimal ABI for PaymentProcessor based on the actual contract interface
+      // Note: createEscrow uses msg.value, not a separate amount parameter
+      PaymentProcessorABI = [
+        "function createEscrow(address _payee, string memory _serviceDescription, uint256 _expirationDays) external payable returns (bytes32)",
+        "function releaseEscrow(bytes32 _escrowId) external",
+        "function refundEscrow(bytes32 _escrowId) external",
+        "function escrows(bytes32) external view returns (bytes32 escrowId, address payer, address payee, uint256 amount, string memory serviceDescription, uint8 status, uint256 createdAt, uint256 completedAt, uint256 expirationTime)",
+        "function getEscrow(bytes32 _escrowId) external view returns (bytes32 escrowId, address payer, address payee, uint256 amount, string memory serviceDescription, uint8 status, uint256 createdAt, uint256 completedAt, uint256 expirationTime)",
+        "function getPayerEscrows(address _payer) external view returns (bytes32[])",
+        "function getPayeeEscrows(address _payee) external view returns (bytes32[])",
+        "event EscrowCreated(bytes32 indexed escrowId, address indexed payer, address indexed payee, uint256 amount, string serviceDescription, uint256 expirationTime)",
+        "event EscrowCompleted(bytes32 indexed escrowId, uint256 amount)",
+        "event EscrowRefunded(bytes32 indexed escrowId, uint256 amount)"
+      ];
+      console.warn('[payment-service] ⚠ Using minimal ABI - compiled artifacts recommended for production');
     }
     this.paymentProcessor = new ethers.Contract(address, PaymentProcessorABI, this.wallet);
   }
@@ -82,9 +144,12 @@ class PaymentService {
         console.log(`[payment-service] Wallet address matches agent address ✓`);
 
         // Create contract instance with payer's wallet
-        const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
-        if (!address || address === '0x0000000000000000000000000000000000000000') {
-          throw new Error('PaymentProcessor address not configured');
+        const address = (deploymentInfo?.contracts?.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+        if (!address || address === '0x0000000000000000000000000000000000000000' || address === 'null') {
+          console.error('[payment-service] PaymentProcessor address lookup failed');
+          console.error('[payment-service] deploymentInfo:', JSON.stringify(deploymentInfo, null, 2));
+          console.error('[payment-service] PAYMENT_PROCESSOR_ADDRESS env:', process.env.PAYMENT_PROCESSOR_ADDRESS);
+          throw new Error('PaymentProcessor address not configured. Check deployment.json or set PAYMENT_PROCESSOR_ADDRESS env variable');
         }
         console.log(`[payment-service] PaymentProcessor address: ${address}`);
         contractToUse = new ethers.Contract(address, PaymentProcessorABI, walletToUse);
@@ -103,7 +168,7 @@ class PaymentService {
       
       // Extract escrow ID from receipt logs if possible
       // Note: We'll need the contract address to parse logs
-      const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+      const address = (deploymentInfo?.contracts?.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
       this.ensureProvider();
       const receipt = await this.provider.getTransactionReceipt(receiptData.txHash);
       
@@ -236,7 +301,7 @@ class PaymentService {
         throw new Error(`Private key does not match agent address. Expected ${releaserAgentAddress}, got ${wallet.address}`);
       }
 
-      const address = (deploymentInfo && deploymentInfo.contracts && deploymentInfo.contracts.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
+      const address = (deploymentInfo?.contracts?.PaymentProcessor) || process.env.PAYMENT_PROCESSOR_ADDRESS;
       contractToUse = new ethers.Contract(address, PaymentProcessorABI, wallet);
     } else {
       // Use backend wallet (default)

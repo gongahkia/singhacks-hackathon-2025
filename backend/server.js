@@ -17,6 +17,9 @@ const tokenRoutes = require('./routes/tokens');
 const authRoutes = require('./routes/auth');
 const a2aRoutes = require('./routes/a2a');
 const reputationRoutes = require('./routes/reputation');
+const validationRoutes = require('./routes/validation');
+const x402EnhancedRoutes = require('./routes/x402-enhanced');
+const unifiedAgentRoutes = require('./routes/unified-agents');
 const settingsRoutes = require('./routes/settings');
 const transactionRoutes = require('./routes/transactions');
 const aiRoutes = require('./routes/ai');
@@ -60,6 +63,9 @@ app.use('/api/tokens', tokenRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/a2a', a2aRoutes);
 app.use('/api/reputation', reputationRoutes);
+app.use('/api/validation', validationRoutes);
+app.use('/api/x402-enhanced', x402EnhancedRoutes);
+app.use('/api/unified-agents', unifiedAgentRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/ai', aiRoutes);
@@ -147,6 +153,19 @@ const AgentService = agentServiceInstance.constructor;
 (async () => {
   try {
     await AgentService.loadAliceBobWalletsFromEnv();
+    
+    // Populate agentIdMapping from ERC-8004 on startup
+    // This ensures agents registered in previous sessions are available
+    try {
+      const allAgents = await agentServiceInstance.getAllAgentsWithIds();
+      console.log(`📦 Found ${allAgents.length} agents from ERC-8004, ensuring agentIdMapping is populated...`);
+      
+      // The getAllAgentsWithIds() already handles merging ERC-8004 with agentIdMapping
+      // This log is just for confirmation
+      console.log(`✅ Agent mapping ready: ${AgentService.agentIdMapping.size} agents in agentIdMapping\n`);
+    } catch (error) {
+      console.warn('⚠️  Could not populate agents from ERC-8004 on startup:', error.message);
+    }
   } catch (error) {
     console.warn('⚠️  Failed to load Alice/Bob wallets on startup:', error.message);
   }

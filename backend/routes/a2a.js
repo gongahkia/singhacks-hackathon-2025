@@ -6,26 +6,44 @@ const x402Service = require('../services/x402-facilitator-service');
 const agentService = require('../services/agent-service');
 const reputationService = require('../services/reputation-service');
 
-// Initiate A2A communication
+// Initiate A2A communication with optional payment integration
 router.post('/communicate', async (req, res, next) => {
   try {
-    const { fromAgent, toAgent, capability, fromAgentPrivateKey } = req.body;
+    const { fromAgent, toAgent, capability, fromAgentPrivateKey, paymentTxId, paymentAmount, feedbackRating } = req.body;
     if (!fromAgent || !toAgent || !capability) {
       return res.status(400).json({ error: 'fromAgent, toAgent, and capability are required' });
     }
-    // Phase 1 (Demo): If fromAgentPrivateKey provided, use agent wallet
-    const result = await a2aService.initiateCommunication(fromAgent, toAgent, capability, fromAgentPrivateKey || null);
+    
+    // Payment options if provided
+    const paymentOptions = paymentTxId ? {
+      txId: paymentTxId,
+      amount: paymentAmount || '0.001',
+      feedbackRating: feedbackRating || 5
+    } : null;
+    
+    const result = await a2aService.initiateCommunication(
+      fromAgent,
+      toAgent,
+      capability,
+      fromAgentPrivateKey || null,
+      paymentOptions
+    );
     res.json(result);
   } catch (e) { next(e); }
 });
 
-// Complete A2A interaction
+// Complete A2A interaction with task lifecycle tracking
 router.post('/interactions/:interactionId/complete', async (req, res, next) => {
   try {
     const { interactionId } = req.params;
-    const { completer, completerPrivateKey } = req.body;
+    const { completer, completerPrivateKey, taskResult } = req.body;
     // Phase 1 (Demo): If completer and completerPrivateKey provided, use agent wallet
-    const result = await a2aService.completeInteraction(interactionId, completer || null, completerPrivateKey || null);
+    const result = await a2aService.completeInteraction(
+      interactionId,
+      completer || null,
+      completerPrivateKey || null,
+      taskResult || null
+    );
     res.json(result);
   } catch (e) { next(e); }
 });
@@ -112,12 +130,17 @@ router.post('/agents/:agentAddress/complete-service', async (req, res, next) => 
       console.warn('x402 verification unavailable, proceeding without:', verifyError.message);
     }
     
-    // Initiate A2A communication on-chain
+    // Initiate A2A communication on-chain with payment linked
     const result = await a2aService.initiateCommunication(
       fromAgent,
       toAgent,
       'payments',
-      fromAgentPrivateKey // Demo only
+      fromAgentPrivateKey, // Demo only
+      {
+        txId: txId,
+        amount: '10',
+        feedbackRating: 5
+      }
     );
     
     // Establish trust from successful payment

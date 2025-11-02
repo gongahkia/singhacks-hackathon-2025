@@ -56,14 +56,15 @@ class A2AService {
   }
 
   /**
-   * Initiate A2A communication between agents
+   * Initiate A2A communication between agents with optional payment integration
    * @param {string} fromAgent - Agent address initiating communication
    * @param {string} toAgent - Target agent address
    * @param {string} capability - Capability being requested
    * @param {string} [fromAgentPrivateKey] - From agent's EVM private key (optional, DEMO ONLY)
+   * @param {Object} [paymentOptions] - Payment options (txId, amount, etc.)
    * @returns {Promise<Object>} Communication initiation result
    */
-  async initiateCommunication(fromAgent, toAgent, capability, fromAgentPrivateKey = null) {
+  async initiateCommunication(fromAgent, toAgent, capability, fromAgentPrivateKey = null, paymentOptions = null) {
     try {
       // Verify both agents exist and check trust thresholds
       const fromAgentData = await agentService.getAgent(fromAgent);
@@ -118,6 +119,32 @@ class A2AService {
         }
       } catch {}
 
+      // Link payment if provided
+      let paymentLinked = false;
+      if (paymentOptions?.txId) {
+        try {
+          const x402EnhancedService = require('./x402-enhanced-service');
+          await x402EnhancedService.verifyAndSettlePayment(
+            paymentOptions.txId,
+            {
+              agentAddress: toAgent,
+              capability: capability,
+              expectedAmount: paymentOptions.amount || '0.001',
+              expectedPayTo: toAgent,
+              payerAddress: fromAgent
+            },
+            {
+              autoFeedback: true,
+              feedbackRating: paymentOptions.feedbackRating || 5
+            }
+          );
+          paymentLinked = true;
+          console.log(`✅ Payment ${paymentOptions.txId} linked to A2A interaction ${interactionId}`);
+        } catch (paymentError) {
+          console.warn('Failed to link payment to A2A interaction:', paymentError.message);
+        }
+      }
+
       // HCS logging is mandatory - ensure topic exists
       const a2aTopicId = await hederaClient.ensureTopic('A2A_TOPIC_ID', 'A2A', 'Agent-to-agent communication events');
       await hederaClient.submitMessage(a2aTopicId, JSON.stringify({
@@ -128,6 +155,8 @@ class A2AService {
           capability,
           trustScoreFrom: fromAgentData.trustScore,
           trustScoreTo: toAgentData.trustScore,
+          paymentLinked: paymentLinked,
+          paymentTxId: paymentOptions?.txId || null,
           timestamp: new Date().toISOString()
         }));
 
@@ -137,7 +166,9 @@ class A2AService {
         txHash: receipt.hash,
         fromAgent,
         toAgent,
-        capability
+        capability,
+        paymentLinked: paymentLinked,
+        paymentTxId: paymentOptions?.txId || null
       };
     } catch (error) {
       throw new Error(`A2A communication failed: ${error.message}`);
@@ -145,13 +176,14 @@ class A2AService {
   }
 
   /**
-   * Complete an A2A interaction (establishes trust)
+   * Complete an A2A interaction (establishes trust) with task lifecycle tracking
    * @param {string} interactionId - Interaction ID to complete
    * @param {string} [completerAgentAddress] - Agent address completing (toAgent). If not provided, uses backend wallet.
    * @param {string} [completerPrivateKey] - Completer's EVM private key (optional, DEMO ONLY)
+   * @param {Object} [taskResult] - Task completion result (success, output, etc.)
    * @returns {Promise<Object>} Completion result
    */
-  async completeInteraction(interactionId, completerAgentAddress = null, completerPrivateKey = null) {
+  async completeInteraction(interactionId, completerAgentAddress = null, completerPrivateKey = null, taskResult = null) {
     try {
       // Get interaction details first to verify completer
       this.ensureInitialized();
@@ -186,6 +218,18 @@ class A2AService {
       const tx = await contractToUse.completeA2AInteraction(interactionId);
       const receipt = await tx.wait();
 
+      // Track task lifecycle
+      const taskLifecycle = {
+        initiated: interaction.timestamp ? new Date(Number(interaction.timestamp) * 1000).toISOString() : new Date().toISOString(),
+        completed: new Date().toISOString(),
+        capability: interaction.capability,
+        fromAgent: interaction.fromAgent,
+        toAgent: interaction.toAgent,
+        success: taskResult?.success !== false,
+        output: taskResult?.output || null,
+        error: taskResult?.error || null
+      };
+
       // HCS logging is mandatory - ensure topic exists
       const a2aTopicId = await hederaClient.ensureTopic('A2A_TOPIC_ID', 'A2A', 'Agent-to-agent communication events');
       await hederaClient.submitMessage(a2aTopicId, JSON.stringify({
@@ -193,13 +237,15 @@ class A2AService {
           interactionId,
           fromAgent: interaction.fromAgent,
           toAgent: interaction.toAgent,
+          taskLifecycle: taskLifecycle,
           timestamp: new Date().toISOString()
         }));
 
       return {
         success: true,
         txHash: receipt.hash,
-        interactionId
+        interactionId,
+        taskLifecycle: taskLifecycle
       };
     } catch (error) {
       throw new Error(`Failed to complete A2A interaction: ${error.message}`);

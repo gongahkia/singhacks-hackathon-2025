@@ -77,19 +77,33 @@ async function seedAgents() {
         capabilities: agent.capabilities,
         metadata: agent.metadata
       }, {
-        timeout: 30000 // 30 second timeout
+        timeout: 60000 // 60 second timeout (ERC-8004 registration can take time)
       });
       
-      console.log(`✅ Registered: ${agent.name} (${agent.agentId})`);
-      console.log(`   Capabilities: ${agent.capabilities.join(', ')}`);
-      console.log(`   Address: ${res.data.registeredAddress || res.data.agentAddress}`);
-      if (res.data.erc8004AgentId) {
-        console.log(`   ERC-8004 Agent ID: ${res.data.erc8004AgentId}`);
+      // Check if agent was already registered
+      if (res.data.txHash === 'already-registered' || res.data.message?.includes('already')) {
+        console.log(`✅ Already registered: ${agent.name} (${agent.agentId})`);
+        if (res.data.erc8004AgentId) {
+          console.log(`   ERC-8004 Agent ID: ${res.data.erc8004AgentId}`);
+        }
+        console.log('');
+      } else {
+        console.log(`✅ Registered: ${agent.name} (${agent.agentId})`);
+        console.log(`   Capabilities: ${agent.capabilities.join(', ')}`);
+        console.log(`   Address: ${res.data.registeredAddress || res.data.agentAddress}`);
+        if (res.data.erc8004AgentId) {
+          console.log(`   ERC-8004 Agent ID: ${res.data.erc8004AgentId}`);
+        }
+        console.log('');
       }
-      console.log('');
     } catch (error) {
-      if (error.response?.data?.error?.includes('Already registered')) {
-        console.log(`⏭️  Skipped: ${agent.name} (already registered)\n`);
+      if (error.response?.data?.error?.includes('already registered') || 
+          error.response?.data?.error?.includes('Already registered')) {
+        console.log(`⏭️  Skipped: ${agent.name} (already registered)`);
+        if (error.response?.data?.erc8004AgentId) {
+          console.log(`   ERC-8004 Agent ID: ${error.response.data.erc8004AgentId}`);
+        }
+        console.log('');
       } else {
         console.error(`❌ Failed: ${agent.name}`);
         if (error.response?.data?.error) {
