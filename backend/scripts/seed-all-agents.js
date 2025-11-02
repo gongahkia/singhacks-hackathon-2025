@@ -3,6 +3,43 @@
 require('dotenv').config({ path: '../.env' });
 const axios = require('axios');
 const { ethers } = require('ethers');
+const fs = require('fs');
+const path = require('path');
+
+// Load from .env.alice and .env.bob files (persistent accounts)
+function loadEnvFile(envFileName) {
+  const envPath = path.resolve(__dirname, '../../', envFileName);
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    const env = {};
+    envContent.split('\n').forEach(line => {
+      const match = line.match(/^([^#=]+)=(.*)$/);
+      if (match) {
+        env[match[1].trim()] = match[2].trim();
+      }
+    });
+    return env;
+  }
+  return null;
+}
+
+const aliceEnv = loadEnvFile('.env.alice') || {};
+const bobEnv = loadEnvFile('.env.bob') || {};
+
+// Get private keys from .env files (persistent accounts)
+const getAlicePrivateKey = () => {
+  return aliceEnv.ALICE_PRIVATE_KEY || 
+         aliceEnv.EVM_PRIVATE_KEY || 
+         process.env.ALICE_PRIVATE_KEY || 
+         process.env.EVM_PRIVATE_KEY;
+};
+
+const getBobPrivateKey = () => {
+  return bobEnv.BOB_PRIVATE_KEY || 
+         bobEnv.EVM_PRIVATE_KEY || 
+         process.env.BOB_PRIVATE_KEY || 
+         process.env.EVM_PRIVATE_KEY;
+};
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 
@@ -64,7 +101,9 @@ const PERMISSIONLESS_AGENTS = [
     capabilities: ['payment', 'agent-negotiation', 'autonomous-transactions', 'multi-agent-coordination'],
     metadata: 'Autonomous agent with permissionless payment capabilities. Alice can receive funds and pay other agents autonomously.',
     paymentMode: 'permissionless',
-    privateKey: process.env.ALICE_PRIVATE_KEY
+    privateKey: getAlicePrivateKey(),
+    accountId: aliceEnv.HEDERA_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID,
+    envFile: '.env.alice'
   },
   {
     agentId: 'bob',
@@ -72,7 +111,9 @@ const PERMISSIONLESS_AGENTS = [
     capabilities: ['payment', 'agent-negotiation', 'autonomous-transactions', 'data-processing'],
     metadata: 'Autonomous agent with permissionless payment capabilities. Bob can receive funds and pay other agents autonomously.',
     paymentMode: 'permissionless',
-    privateKey: process.env.BOB_PRIVATE_KEY
+    privateKey: getBobPrivateKey(),
+    accountId: bobEnv.HEDERA_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID,
+    envFile: '.env.bob'
   }
 ];
 
@@ -96,12 +137,17 @@ async function seedAllAgents() {
     await registerAgent(agent, 'permissioned');
   }
   
-  // Seed permissionless agents (Alice/Bob)
-  console.log('\n📝 Seeding permissionless agents (Alice & Bob)...\n');
+  // Seed permissionless agents (Alice/Bob) - using persistent accounts
+  console.log('\n📝 Seeding permissionless agents (Alice & Bob) with persistent accounts...\n');
   for (const agent of PERMISSIONLESS_AGENTS) {
     if (!agent.privateKey) {
-      console.log(`⚠️  Skipping ${agent.name}: ${agent.agentId.toUpperCase()}_PRIVATE_KEY not set in .env\n`);
+      console.log(`⚠️  Skipping ${agent.name}: Private key not found in ${agent.envFile} or .env\n`);
+      console.log(`   💡 Add ${agent.agentId.toUpperCase()}_PRIVATE_KEY or EVM_PRIVATE_KEY to ${agent.envFile}\n`);
       continue;
+    }
+    console.log(`   Using persistent account from ${agent.envFile || '.env'}`);
+    if (agent.accountId) {
+      console.log(`   Hedera Account ID: ${agent.accountId}`);
     }
     await registerAgent(agent, 'permissionless', agent.privateKey);
   }

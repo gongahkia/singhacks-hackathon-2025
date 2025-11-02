@@ -6,11 +6,48 @@
 require('dotenv').config({ path: '../.env' });
 const axios = require('axios');
 const { ethers } = require('ethers');
+const fs = require('fs');
+const path = require('path');
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 
-// Demo agents with hardcoded wallets (permissionless mode)
-// In production, these would be securely stored
+// Load from .env.alice and .env.bob files (persistent accounts)
+function loadEnvFile(envFileName) {
+  const envPath = path.resolve(__dirname, '../../', envFileName);
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    const env = {};
+    envContent.split('\n').forEach(line => {
+      const match = line.match(/^([^#=]+)=(.*)$/);
+      if (match) {
+        env[match[1].trim()] = match[2].trim();
+      }
+    });
+    return env;
+  }
+  return null;
+}
+
+// Load Alice and Bob credentials from .env files or main .env
+const aliceEnv = loadEnvFile('.env.alice') || {};
+const bobEnv = loadEnvFile('.env.bob') || {};
+
+// Get private keys - prioritize .env.alice/.env.bob, then main .env, then EVM_PRIVATE_KEY from respective files
+const getAlicePrivateKey = () => {
+  return aliceEnv.ALICE_PRIVATE_KEY || 
+         aliceEnv.EVM_PRIVATE_KEY || 
+         process.env.ALICE_PRIVATE_KEY || 
+         process.env.EVM_PRIVATE_KEY;
+};
+
+const getBobPrivateKey = () => {
+  return bobEnv.BOB_PRIVATE_KEY || 
+         bobEnv.EVM_PRIVATE_KEY || 
+         process.env.BOB_PRIVATE_KEY || 
+         process.env.EVM_PRIVATE_KEY;
+};
+
+// Demo agents with persistent wallets (permissionless mode)
 const DEMO_AGENTS = [
   {
     agentId: 'alice',
@@ -18,9 +55,10 @@ const DEMO_AGENTS = [
     capabilities: ['payment', 'agent-negotiation', 'autonomous-transactions', 'multi-agent-coordination'],
     metadata: 'Autonomous agent with permissionless payment capabilities. Alice can receive funds and pay other agents autonomously.',
     paymentMode: 'permissionless',
-    // Use ALICE_PRIVATE_KEY from env, or generate random (not recommended for production)
-    // IMPORTANT: Add ALICE_PRIVATE_KEY to .env file for persistence across restarts
-    privateKey: process.env.ALICE_PRIVATE_KEY || ethers.Wallet.createRandom().privateKey
+    // Load from .env.alice (persistent) or main .env
+    privateKey: getAlicePrivateKey(),
+    accountId: aliceEnv.HEDERA_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID,
+    envFile: '.env.alice'
   },
   {
     agentId: 'bob',
@@ -28,9 +66,10 @@ const DEMO_AGENTS = [
     capabilities: ['payment', 'agent-negotiation', 'autonomous-transactions', 'data-processing'],
     metadata: 'Autonomous agent with permissionless payment capabilities. Bob can receive funds and pay other agents autonomously.',
     paymentMode: 'permissionless',
-    // Use BOB_PRIVATE_KEY from env, or generate random (not recommended for production)
-    // IMPORTANT: Add BOB_PRIVATE_KEY to .env file for persistence across restarts
-    privateKey: process.env.BOB_PRIVATE_KEY || ethers.Wallet.createRandom().privateKey
+    // Load from .env.bob (persistent) or main .env
+    privateKey: getBobPrivateKey(),
+    accountId: bobEnv.HEDERA_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID,
+    envFile: '.env.bob'
   }
 ];
 
@@ -50,18 +89,41 @@ async function seedDemoAgents() {
   
   for (const agent of DEMO_AGENTS) {
     try {
+      // Check if private key is available
+      if (!agent.privateKey) {
+        console.log(`⚠️  Skipping ${agent.name}: No private key found`);
+        console.log(`   💡 Expected in ${agent.envFile} or .env as ${agent.agentId.toUpperCase()}_PRIVATE_KEY or EVM_PRIVATE_KEY\n`);
+        continue;
+      }
+      
       // Generate wallet from private key to get address
       const wallet = new ethers.Wallet(agent.privateKey);
       const walletAddress = wallet.address;
       
       console.log(`📝 Registering ${agent.name} (${agent.agentId})...`);
       console.log(`   Wallet Address: ${walletAddress}`);
+      if (agent.accountId) {
+        console.log(`   Hedera Account ID: ${agent.accountId}`);
+      }
       console.log(`   Payment Mode: ${agent.paymentMode}`);
       console.log(`   Capabilities: ${agent.capabilities.join(', ')}`);
+      console.log(`   Source: ${agent.envFile || '.env'} (persistent account)`);
       
-      // Note: Store the private key in an env file for persistence
-      // In production, use secure key management
-      console.log(`   ⚠️  Private Key: ${agent.privateKey.substring(0, 10)}... (save this securely!)`);
+      // Check if already registered
+      try {
+        const existingAgent = await axios.get(`${BASE_URL}/api/agents/${walletAddress}`, { timeout: 5000 });
+        if (existingAgent.data && existingAgent.data.address === walletAddress) {
+          console.log(`✅ Already registered: ${agent.name} (${agent.agentId})`);
+          console.log(`   Address: ${walletAddress}`);
+          if (existingAgent.data.erc8004AgentId) {
+            console.log(`   ERC-8004 Agent ID: ${existingAgent.data.erc8004AgentId}`);
+          }
+          console.log('');
+          continue;
+        }
+      } catch (checkError) {
+        // Not found, proceed with registration
+      }
       
       const res = await axios.post(`${BASE_URL}/api/agents/register-agent`, {
         agentId: agent.agentId,
@@ -80,16 +142,11 @@ async function seedDemoAgents() {
       if (res.data.erc8004AgentId) {
         console.log(`   ERC-8004 Agent ID: ${res.data.erc8004AgentId}`);
       }
-      
-      // Warn if using random key (not persisted)
-      if (!process.env[`${agent.name.toUpperCase()}_PRIVATE_KEY`]) {
-        console.log(`   ⚠️  WARNING: Using random private key. Add ${agent.name.toUpperCase()}_PRIVATE_KEY to .env for persistence!`);
-        console.log(`   Private Key: ${agent.privateKey}`);
-      }
-      console.log('');
+      console.log(`   ✅ Using persistent account from ${agent.envFile || '.env'}\n`);
     } catch (error) {
-      if (error.response?.data?.error?.includes('Already registered')) {
-        console.log(`⏭️  Skipped: ${agent.name} (already registered)\n`);
+      if (error.response?.data?.error?.includes('Already registered') || 
+          error.response?.data?.error?.includes('already')) {
+        console.log(`✅ Already registered: ${agent.name} (using persistent account)\n`);
       } else {
         console.error(`❌ Failed: ${agent.name}`);
         if (error.response?.data?.error) {

@@ -355,9 +355,32 @@ class ERC8004Service {
     }
     
     try {
-      const summary = await this.reputationRegistry.getSummary(agentId, clientAddresses, tag1, tag2);
-      const count = Number(summary.count || summary[0] || 0);
-      const averageScore = Number(summary.averageScore !== undefined ? summary.averageScore : (summary[1] !== undefined ? summary[1] : 0));
+      const summary = await this.reputationRegistry.getSummary(agentId, clientAddresses || [], tag1 || ethers.ZeroHash, tag2 || ethers.ZeroHash);
+      
+      // Handle different return formats (tuple vs object)
+      let count = 0;
+      let averageScore = 0;
+      
+      if (Array.isArray(summary)) {
+        // Tuple format: [count, averageScore]
+        count = Number(summary[0] || 0);
+        averageScore = Number(summary[1] || 0);
+      } else if (summary && typeof summary === 'object') {
+        // Object format: { count, averageScore }
+        count = Number(summary.count || summary.count?.toString() || 0);
+        averageScore = Number(summary.averageScore !== undefined 
+          ? summary.averageScore 
+          : (summary.averageScore?.toString() || 0));
+      } else {
+        // Fallback: try to parse as number
+        count = Number(summary || 0);
+        averageScore = 0;
+      }
+      
+      // Log for debugging
+      if (count > 0) {
+        console.log(`ERC-8004 Reputation for agent ${agentId}: count=${count}, average=${averageScore}`);
+      }
       
       return {
         count,
@@ -365,7 +388,15 @@ class ERC8004Service {
         averageScore: averageScore
       };
     } catch (error) {
-      console.warn('Failed to get reputation summary:', error.message);
+      // Log full error for debugging
+      console.warn(`Failed to get reputation summary for agent ${agentId}:`, error.message);
+      if (error.data) {
+        console.warn('  Error data:', error.data);
+      }
+      // Check if agent has no feedback yet (this is normal for new agents)
+      if (error.message?.includes('revert') || error.message?.includes('invalid')) {
+        console.log(`  Agent ${agentId} may have no feedback yet (this is normal for new agents)`);
+      }
       return {
         count: 0,
         sum: 0,
