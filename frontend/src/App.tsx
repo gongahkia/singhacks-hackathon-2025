@@ -47,7 +47,7 @@ export default function App() {
   }
 
   const mapAgentTxToRow = (r: AgentTxRecord): Transaction => ({
-    id: r.id,
+    id: r.txHash || r.escrowId || r.id, // Use actual transaction hash/ID for linking
     type: 'Agent Payment',
     agent: r.sellerName || 'Unknown Agent',
     amount: `${r.amountHBAR} HBAR`,
@@ -106,7 +106,7 @@ export default function App() {
                 <div className="space-y-2">
                   {agents.map((agent: any, index: number) => (
                     <Link
-                      key={agent.address || agent.agentId || index}
+                      key={agent.agentId || `${agent.address}-${index}`}
                       href={`/marketplace/${agent.agentId || agent.address}`}
                       className="flex items-center justify-between p-4 border border-border hover:border-foreground/40 hover:bg-accent/30 transition-all group"
                     >

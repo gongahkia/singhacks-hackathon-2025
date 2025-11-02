@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Send, Loader2, CheckCircle2, XCircle } from 'lucide-react'
-import { useAccount } from 'wagmi'
+import { useAccount, useWalletClient } from 'wagmi'
 import { addAgentTransaction } from '@/lib/tx-store'
 import PaymentRequest from '@/components/payment-request'
 import ProgressSidebar, { type ProgressItem } from '@/components/progress-sidebar'
 import { formatPaymentConfirmation } from '@/lib/format-utils'
+import { prepareAndSignEscrowForBackend } from '@/lib/wallet-transaction-signer'
 
 type MessageRole = 'user' | 'assistant' | 'event' | 'connector'
 
@@ -71,6 +72,7 @@ export default function ChatPage() {
   }, [assistantAction?.payload?.amount, selectedAgent])
   const [connectedAgent, setConnectedAgent] = useState<any | null>(null)
   const { address: walletAddress, isConnected: walletConnected } = useAccount()
+  const { data: walletClient } = useWalletClient()
   
   // Wallet toggle state - user chooses between "My Wallet" or "Agent Wallet"
   const [useAgentWallet, setUseAgentWallet] = useState<boolean>(false)
@@ -737,18 +739,109 @@ export default function ChatPage() {
                       if (!walletAddress) {
                         throw new Error('Wallet address required when using your wallet')
                       }
+                      if (!walletClient) {
+                        throw new Error('Wallet client not available. Please connect your wallet.')
+                      }
+                      
                       paymentBody.userWalletAddress = walletAddress
-                      // TODO: Add signedPaymentHeader when x402 frontend signing is complete
-                      // paymentBody.signedPaymentHeader = await signPaymentHeader(...)
+                      
+                      // Sign the escrow transaction with user's wallet (triggers wallet popup!)
+                      try {
+                        const payTo = (selectedAgent?.agentWalletAddress || selectedAgent?.address || toAgentId) as `0x${string}`
+                        
+                        // Show message that wallet signing is starting
+                        addEventMessage({ 
+                          type: 'transaction_details_confirmed', 
+                          text: 'Preparing transaction...' 
+                        } as any, 'pending')
+                        
+                        // Sign the escrow transaction (THIS TRIGGERS WALLET POPUP!)
+                        addEventMessage({ 
+                          type: 'transaction_details_confirmed', 
+                          text: 'Please approve the transaction in your wallet...' 
+                        } as any, 'pending')
+                        
+                        const { txHash } = await prepareAndSignEscrowForBackend(
+                          {
+                            payee: payTo,
+                            amountInHbar: paymentAmount,
+                            description: `Payment from ${fromAgentId} to ${toAgentId}`,
+                            expirationDays: 0
+                          },
+                          walletClient,
+                          walletAddress
+                        )
+                        
+                        // Transaction was sent directly by wallet (MetaMask doesn't support signTransaction)
+                        // Send the transaction hash to backend - it will verify the transaction
+                        paymentBody.txHash = txHash
+                        paymentBody.transactionSent = true // Flag to indicate transaction was already sent
+                        
+                        // Update message
+                        addEventMessage({ 
+                          type: 'transaction_details_confirmed', 
+                          text: 'Transaction signed. Submitting payment...' 
+                        } as any, 'pending')
+                      } catch (signError: any) {
+                        // User rejected or signing failed
+                        const errorMsg = signError.message?.includes('reject') || signError.message?.includes('denied')
+                          ? 'Transaction was rejected. Please try again or use Agent Wallet mode.'
+                          : `Transaction signing failed: ${signError.message}`
+                        
+                        setPaymentConfirmed(false)
+                        setPaymentConfirmationText(errorMsg)
+                        setPaymentProcessing(false)
+                        
+                        updateEventStatusById(txStartId, 'error')
+                        
+                        const errorMsgObj: Message = {
+                          id: (Date.now() + 2).toString(),
+                          role: 'assistant',
+                          content: errorMsg,
+                          timestamp: new Date()
+                        }
+                        setMessages(prev => [...prev, errorMsgObj])
+                        
+                        return // Exit early
+                      }
                     }
                     
-                    // Make payment request
-                    const pResp = await fetch(`${backendUrl}/api/agent-connection/pay-agent`, {
+                    // Make payment request (now with signedTx if user wallet was used)
+                    let pResp = await fetch(`${backendUrl}/api/agent-connection/pay-agent`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(paymentBody)
                     })
-                    const pData = await pResp.json()
+                    let pData = await pResp.json()
+
+                    // If signature is still required (shouldn't happen now, but handle gracefully)
+                    if (pData.requiresSignature && !useAgentWallet && walletAddress) {
+                      // Check if agent wallet is available as alternative
+                      const agentWalletAvailable = selectedAgent?.agentWalletAddress || selectedAgent?.paymentMode === 'permissionless'
+                      
+                      const errorMsg = agentWalletAvailable
+                        ? 'Payment requires wallet signature. Please switch to "Agent Wallet" mode to use the agent\'s autonomous wallet, or try signing again.'
+                        : 'Payment requires wallet signature. Please try signing again or use "Agent Wallet" mode if available.'
+                      
+                      const success = false
+                      const text = `Payment requires signature: ${errorMsg}`
+                      setPaymentConfirmed(success)
+                      setPaymentConfirmationText(text)
+                      setPaymentProcessing(false)
+                      
+                      // Update event status
+                      updateEventStatusById(txStartId, 'error')
+                      
+                      const confirmMsg: Message = {
+                        id: (Date.now() + 2).toString(),
+                        role: 'assistant',
+                        content: text,
+                        timestamp: new Date()
+                      }
+                      setMessages(prev => [...prev, confirmMsg])
+                      
+                      return // Exit early
+                    }
 
                     const success = !pData.error
                     const text = success

@@ -131,7 +131,13 @@ router.get('/:address', async (req, res, next) => {
   try {
     const agent = await agentService.getAgent(req.params.address);
     res.json(agent);
-  } catch (e) { next(e); }
+  } catch (e) {
+    // Return 404 for "agent not found" errors
+    if (e.message?.includes('Agent not found')) {
+      return res.status(404).json({ error: e.message });
+    }
+    next(e);
+  }
 });
 
 // Update agent capabilities

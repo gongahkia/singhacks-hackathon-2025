@@ -38,5 +38,6 @@ export function addAgentTransaction(tx: AgentTxRecord) {
 
 export function findAgentTransaction(id: string): AgentTxRecord | undefined {
   const list = getAgentTransactions()
-  return list.find((t) => t.id === id)
+  // Search by id, txHash, or escrowId to support links using actual transaction IDs
+  return list.find((t) => t.id === id || t.txHash === id || t.escrowId === id)
 }

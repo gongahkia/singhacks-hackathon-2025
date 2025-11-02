@@ -37,6 +37,7 @@ export default function AgentDetailPage({ params }: PageProps) {
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [hcsMessages, setHcsMessages] = useState<any[]>([])
+  const [interactions, setInteractions] = useState<any[]>([])
   const [showTimeline, setShowTimeline] = useState(false)
   const [pollingActive, setPollingActive] = useState(false)
   const [hybridTrust, setHybridTrust] = useState<any>(null)
@@ -51,10 +52,21 @@ export default function AgentDetailPage({ params }: PageProps) {
   useEffect(() => {
     if (showTimeline && pollingActive && agent) {
       fetchHCSMessages()
-      const interval = setInterval(fetchHCSMessages, 5000)
+      fetchInteractions()
+      const interval = setInterval(() => {
+        fetchHCSMessages()
+        fetchInteractions()
+      }, 5000)
       return () => clearInterval(interval)
     }
   }, [showTimeline, pollingActive, agent])
+
+  useEffect(() => {
+    // Fetch interactions when agent loads or changes
+    if (agent?.address) {
+      fetchInteractions()
+    }
+  }, [agent?.address])
 
   useEffect(() => {
     if (agent?.address) {
@@ -159,6 +171,24 @@ export default function AgentDetailPage({ params }: PageProps) {
     }
   }
 
+  const fetchInteractions = async () => {
+    if (!agent?.address) return
+    try {
+      const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const res = await fetch(`${BASE_URL}/api/agents/${agent.address}/interactions`)
+      if (res.ok) {
+        const data = await res.json()
+        setInteractions(data.interactions || [])
+      } else {
+        console.warn('Failed to fetch interactions:', res.status)
+        setInteractions([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch interactions:', error)
+      setInteractions([])
+    }
+  }
+
   if (loading || error || !agent) {
     return (
       <main className="min-h-screen">
@@ -221,10 +251,11 @@ export default function AgentDetailPage({ params }: PageProps) {
   }
 
   const handleFeedbackSuccess = () => {
-    // Refresh trust score after feedback submission
+    // Refresh trust score and interactions after feedback submission
     if (agent?.address) {
       setTimeout(() => {
         fetchHybridTrust()
+        fetchInteractions() // Refresh interaction history
       }, 2000) // Wait a bit for on-chain update
     }
   }
@@ -334,30 +365,67 @@ export default function AgentDetailPage({ params }: PageProps) {
               
               {showTimeline && (
                 <div className="p-6 pt-0 space-y-3 max-h-96 overflow-y-auto">
-                  {hcsMessages.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No interactions yet</p>
-                  )}
-                  {hcsMessages.map((msg, i) => (
-                    <div key={i} className="border-l-2 border-blue-500 pl-4 py-2 hover:bg-accent/50 transition-colors">
-                      <div className="text-sm font-medium">{msg.event}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(msg.timestamp).toLocaleString()}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Topic: {msg.topicName}
-                      </div>
-                      {msg.details && (
-                        <details className="mt-1 text-xs">
-                          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                            View Details
-                          </summary>
-                          <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto max-w-full">
-                            {JSON.stringify(msg.details, null, 2)}
-                          </pre>
-                        </details>
-                      )}
+                  {/* On-chain Interactions */}
+                  {interactions.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      <h3 className="text-sm font-semibold text-foreground/80">On-Chain Interactions ({interactions.length})</h3>
+                      {interactions.map((interaction, i) => (
+                        <div key={i} className="border-l-2 border-green-500 pl-4 py-2 hover:bg-accent/50 transition-colors">
+                          <div className="text-sm font-medium">
+                            {interaction.capability || 'A2A Interaction'}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {interaction.fromAgent === agent?.address ? 'To' : 'From'}: {interaction.fromAgent === agent?.address ? interaction.toAgent : interaction.fromAgent}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {interaction.timestamp ? new Date(interaction.timestamp).toLocaleString() : 'N/A'}
+                          </div>
+                          <div className="text-xs mt-1">
+                            <span className={`px-2 py-0.5 rounded ${interaction.completed ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-yellow-100 text-yellow-800 border border-yellow-200'}`}>
+                              {interaction.completed ? 'Completed' : 'Pending'}
+                            </span>
+                          </div>
+                          {interaction.interactionId && (
+                            <div className="text-xs text-muted-foreground font-mono mt-1 truncate">
+                              ID: {interaction.interactionId}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  
+                  {/* HCS Messages */}
+                  {(hcsMessages.length > 0 || interactions.length === 0) && (
+                    <div className="space-y-2">
+                      {interactions.length > 0 && <h3 className="text-sm font-semibold text-foreground/80">HCS Logs</h3>}
+                      {hcsMessages.length === 0 && interactions.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No interactions yet</p>
+                      )}
+                      {hcsMessages.map((msg, i) => (
+                        <div key={i} className="border-l-2 border-blue-500 pl-4 py-2 hover:bg-accent/50 transition-colors">
+                          <div className="text-sm font-medium">{msg.event}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(msg.timestamp).toLocaleString()}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Topic: {msg.topicName}
+                          </div>
+                          {msg.details && (
+                            <details className="mt-1 text-xs">
+                              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                                View Details
+                              </summary>
+                              <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto max-w-full">
+                                {JSON.stringify(msg.details, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
                   {pollingActive && (
                     <div className="text-xs text-green-600 flex items-center gap-2 pt-2">
                       <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />

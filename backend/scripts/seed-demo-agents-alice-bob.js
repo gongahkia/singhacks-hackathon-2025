@@ -122,7 +122,12 @@ async function seedDemoAgents() {
           continue;
         }
       } catch (checkError) {
-        // Not found, proceed with registration
+        // Agent not found is expected for new registrations - silently proceed
+        // Only log if it's a different error (network, timeout, etc.)
+        if (checkError.response?.status !== 404 && checkError.code !== 'ECONNREFUSED') {
+          console.warn(`   ⚠️  Warning checking existing agent: ${checkError.message}`);
+        }
+        // Proceed with registration
       }
       
       const res = await axios.post(`${BASE_URL}/api/agents/register-agent`, {

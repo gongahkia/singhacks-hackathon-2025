@@ -85,31 +85,25 @@ const WALLETLESS_AGENTS = [
     name: 'Price Oracle Agent',
     capabilities: ['oracle', 'price-feed', 'data-aggregation', 'defi'],
     metadata: 'Decentralized price oracle for DeFi protocols'
-  },
-  {
-    agentId: 'token-distributor',
-    name: 'Token Distribution Agent',
-    capabilities: ['token-distribution', 'airdrop', 'vesting', 'staking'],
-    metadata: 'Automated token distribution and vesting management'
   }
 ];
 
 const PERMISSIONLESS_AGENTS = [
   {
-    agentId: 'alice',
-    name: 'Alice',
+    agentId: 'payment-processing-agent',
+    name: 'Payment Processing Agent',
     capabilities: ['payment', 'agent-negotiation', 'autonomous-transactions', 'multi-agent-coordination'],
-    metadata: 'Autonomous agent with permissionless payment capabilities. Alice can receive funds and pay other agents autonomously.',
+    metadata: 'Autonomous payment processing agent with permissionless payment capabilities. Can receive funds and pay other agents autonomously.',
     paymentMode: 'permissionless',
     privateKey: getAlicePrivateKey(),
     accountId: aliceEnv.HEDERA_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID,
     envFile: '.env.alice'
   },
   {
-    agentId: 'bob',
-    name: 'Bob',
+    agentId: 'ai-credits-agent',
+    name: 'AI Credits Agent',
     capabilities: ['payment', 'agent-negotiation', 'autonomous-transactions', 'data-processing'],
-    metadata: 'Autonomous agent with permissionless payment capabilities. Bob can receive funds and pay other agents autonomously.',
+    metadata: 'Autonomous AI credits agent with permissionless payment capabilities. Can receive funds and pay other agents autonomously.',
     paymentMode: 'permissionless',
     privateKey: getBobPrivateKey(),
     accountId: bobEnv.HEDERA_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID,
@@ -137,8 +131,8 @@ async function seedAllAgents() {
     await registerAgent(agent, 'permissioned');
   }
   
-  // Seed permissionless agents (Alice/Bob) - using persistent accounts
-  console.log('\n📝 Seeding permissionless agents (Alice & Bob) with persistent accounts...\n');
+  // Seed permissionless agents (Payment Processing Agent & AI Credits Agent) - using persistent accounts
+  console.log('\n📝 Seeding permissionless agents (Payment Processing Agent & AI Credits Agent) with persistent accounts...\n');
   for (const agent of PERMISSIONLESS_AGENTS) {
     if (!agent.privateKey) {
       console.log(`⚠️  Skipping ${agent.name}: Private key not found in ${agent.envFile} or .env\n`);
@@ -154,7 +148,7 @@ async function seedAllAgents() {
   
   console.log('\n✨ Seeding complete!');
   console.log('\n💡 All agents are now available in the marketplace.');
-  console.log('   Permissionless agents (Alice/Bob) can receive funds and pay autonomously.');
+  console.log('   Permissionless agents (Payment Processing Agent & AI Credits Agent) can receive funds and pay autonomously.');
 }
 
 async function registerAgent(agent, paymentMode, privateKey = null) {

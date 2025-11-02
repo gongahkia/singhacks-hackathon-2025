@@ -422,7 +422,14 @@ class ERC8004Service {
     }
     
     try {
-      const result = await this.reputationRegistry.readAllFeedback(agentId, clientAddresses, tag1, tag2, includeRevoked);
+      // Call the view function - ethers.js automatically uses staticCall for view functions
+      const result = await this.reputationRegistry.readAllFeedback(
+        agentId, 
+        clientAddresses, 
+        tag1, 
+        tag2, 
+        includeRevoked
+      );
       
       return {
         clients: result.clients || result[0] || [],
@@ -432,14 +439,37 @@ class ERC8004Service {
         revokedStatuses: result.revokedStatuses || result[4] || []
       };
     } catch (error) {
-      console.warn('Failed to read feedback:', error.message);
-      return {
-        clients: [],
-        scores: [],
-        tag1s: [],
-        tag2s: [],
-        revokedStatuses: []
-      };
+      // Handle various error types gracefully
+      const errorMsg = error.message || error.toString();
+      const errorCode = error.code || '';
+      
+      // Check for specific error types that indicate the agent doesn't exist or has no feedback
+      if (errorCode === 'CALL_EXCEPTION' || 
+          errorMsg.includes('CALL_EXCEPTION') || 
+          errorMsg.includes('missing revert data') ||
+          errorMsg.includes('execution reverted') ||
+          errorMsg.includes('revert') ||
+          errorMsg.includes('not found')) {
+        // Agent likely doesn't exist or has no feedback - return empty arrays silently
+        // This is a common case and not really an error
+        return {
+          clients: [],
+          scores: [],
+          tag1s: [],
+          tag2s: [],
+          revokedStatuses: []
+        };
+      } else {
+        // Other unexpected errors - log but still return empty arrays gracefully
+        console.warn(`Failed to read feedback for agentId ${agentId}: ${errorMsg}`);
+        return {
+          clients: [],
+          scores: [],
+          tag1s: [],
+          tag2s: [],
+          revokedStatuses: []
+        };
+      }
     }
   }
 

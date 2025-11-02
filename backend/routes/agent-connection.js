@@ -127,7 +127,7 @@ router.get('/connections', async (req, res, next) => {
 // Use agent to pay another agent (user can choose: My Wallet or Agent Wallet)
 router.post('/pay-agent', async (req, res, next) => {
   try {
-    const { fromAgentId, toAgentId, amount, currency, userWalletAddress, signedPaymentHeader, useAgentWallet } = req.body;
+    const { fromAgentId, toAgentId, amount, currency, userWalletAddress, signedPaymentHeader, signedTx, useAgentWallet } = req.body;
     
     // Get agent details
     const toAgent = await agentService.getAgentById(toAgentId);
@@ -224,14 +224,142 @@ router.post('/pay-agent', async (req, res, next) => {
       
       fromAddress = userWalletAddress;
       
-      // For user wallet mode, we expect a signed payment header from x402
-      if (signedPaymentHeader) {
-        // Use x402 facilitator to verify and settle
+      const payTo = toAgent.agentWalletAddress || toAgent.registeredAddress || toAgent.address;
+      
+      // Check if transaction was already sent (MetaMask/JSON-RPC wallets send directly)
+      const { signedTx, txHash, transactionSent } = req.body;
+      
+      if (transactionSent && txHash) {
+        // Transaction was sent directly by wallet (MetaMask doesn't support signTransaction)
+        // Verify the transaction and extract escrow details
+        try {
+          console.log(`[agent-connection] Processing transaction hash from user wallet ${userWalletAddress}: ${txHash}`);
+          
+          const transactionService = require('../services/transaction-service');
+          const ethers = require('ethers');
+          
+          // Get transaction details first (transaction might still be pending)
+          transactionService.ensureProvider();
+          const tx = await transactionService.provider.getTransaction(txHash);
+          
+          if (!tx) {
+            throw new Error('Transaction not found');
+          }
+          
+          // Verify transaction is to the correct contract and from the user wallet
+          const paymentProcessorAddress = process.env.PAYMENT_PROCESSOR_ADDRESS || 
+            (require('../services/payment-service').deploymentInfo?.contracts?.PaymentProcessor);
+          
+          if (!paymentProcessorAddress) {
+            throw new Error('PaymentProcessor address not configured');
+          }
+          
+          if (tx.to?.toLowerCase() !== paymentProcessorAddress.toLowerCase()) {
+            throw new Error('Transaction is not to the PaymentProcessor contract');
+          }
+          
+          if (tx.from?.toLowerCase() !== userWalletAddress.toLowerCase()) {
+            throw new Error('Transaction sender does not match user wallet address');
+          }
+          
+          // Try to get receipt (may be pending)
+          let receipt = null;
+          let escrowId = null;
+          
+          try {
+            receipt = await transactionService.provider.getTransactionReceipt(txHash);
+            if (receipt && receipt.status === 1) {
+              // Transaction confirmed - parse escrow from logs
+              const PaymentProcessorABI = require('../../contracts/artifacts/src/PaymentProcessor.sol/PaymentProcessor.json')?.abi || [];
+              
+              if (PaymentProcessorABI.length > 0) {
+                try {
+                  const contract = new ethers.Contract(paymentProcessorAddress, PaymentProcessorABI, transactionService.provider);
+                  const log = receipt.logs.find(l => {
+                    try { 
+                      const parsed = contract.interface.parseLog(l);
+                      return parsed?.name === 'EscrowCreated';
+                    } catch { return false; }
+                  });
+                  
+                  if (log) {
+                    const parsed = contract.interface.parseLog(log);
+                    escrowId = parsed.args.escrowId;
+                  }
+                } catch (logError) {
+                  console.warn(`[agent-connection] Failed to parse escrow from logs:`, logError.message);
+                }
+              }
+            } else if (receipt && receipt.status === 0) {
+              throw new Error('Transaction failed');
+            }
+          } catch (receiptError) {
+            // Transaction might still be pending - that's okay, we'll use txHash as escrowId
+            console.log(`[agent-connection] Transaction ${txHash} is pending, will use hash as escrowId`);
+          }
+          
+          // Create payment result
+          paymentResult = {
+            success: true,
+            escrowId: escrowId || txHash, // Use hash as fallback if escrowId not found
+            txHash: txHash,
+            amount: amount,
+            payer: userWalletAddress,
+            status: receipt ? (receipt.status === 1 ? 'confirmed' : 'failed') : 'pending'
+          };
+          
+          // Log to HCS
+          try {
+            const hederaClient = require('./hedera-client');
+            const paymentTopicId = await hederaClient.ensureTopic('PAYMENT_TOPIC_ID', 'Payment', 'Agent payment events');
+            await hederaClient.submitMessage(paymentTopicId, JSON.stringify({
+              event: 'EscrowCreated',
+              escrowId: escrowId || txHash,
+              payer: userWalletAddress,
+              payee: payTo,
+              amount: amount,
+              txHash: txHash,
+              status: receipt ? 'confirmed' : 'pending',
+              timestamp: new Date().toISOString()
+            }));
+          } catch (hcsError) {
+            console.warn('[agent-connection] HCS logging failed:', hcsError.message);
+          }
+          
+          console.log(`[agent-connection] Payment verified from transaction hash: ${paymentResult.escrowId}`);
+        } catch (txError) {
+          console.error(`[agent-connection] Transaction verification failed:`, txError);
+          return res.status(400).json({ 
+            error: `Payment verification failed: ${txError.message}` 
+          });
+        }
+      } else if (signedTx) {
+        // Use signed transaction hex (for wallets that support eth_signTransaction)
+        try {
+          console.log(`[agent-connection] Processing signed transaction from user wallet ${userWalletAddress}`);
+          
+          paymentResult = await paymentService.createEscrow(
+            payTo,
+            amount,
+            `Payment from ${fromAgentId} (via ${userWalletAddress}) to ${toAgentId}`,
+            userWalletAddress,
+            null, // No private key (user signed)
+            signedTx, // Signed transaction hex
+            0 // expirationDays
+          );
+          
+          console.log(`[agent-connection] Payment escrow created with signedTx: ${paymentResult.escrowId}`);
+        } catch (signedTxError) {
+          console.error(`[agent-connection] Signed transaction payment failed:`, signedTxError);
+          return res.status(400).json({ 
+            error: `Payment failed: ${signedTxError.message}` 
+          });
+        }
+      } else if (signedPaymentHeader) {
+        // Use x402 facilitator to verify and settle (for Hedera-native wallets)
         const x402Service = require('../services/x402-facilitator-service');
         
         try {
-          const payTo = toAgent.agentWalletAddress || toAgent.registeredAddress || toAgent.address;
-          
           // If signedPaymentHeader provided, extract txId and verify
           // For full x402, we'd parse the header and use facilitator
           paymentResult = await paymentService.createMultiCurrencyEscrow(
@@ -250,7 +378,7 @@ router.post('/pay-agent', async (req, res, next) => {
       } else {
         // Direct payment - user should sign in frontend (or use x402 header)
         return res.status(400).json({ 
-          error: 'signedPaymentHeader required when using your wallet. Please sign the payment with your wallet.',
+          error: 'signedTx or signedPaymentHeader required when using your wallet. Please sign the payment with your wallet.',
           requiresSignature: true
         });
       }
