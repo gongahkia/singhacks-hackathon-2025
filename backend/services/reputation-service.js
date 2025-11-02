@@ -329,10 +329,10 @@ class ReputationService {
     }
     
     try {
-      // 1. ERC-8004 Official Reputation (BASE - 70%)
+      // 1. ERC-8004 Official Reputation (BASE - 50%)
       let erc8004Score = 0;
       let erc8004Count = 0;
-      let erc8004Weight = 0.7; // CHANGED: 40% -> 70%
+      let erc8004Weight = 0.5; // CHANGED: 70% -> 50%
       
       if (officialAgentId !== null) {
         try {
@@ -346,7 +346,7 @@ class ReputationService {
         }
       }
       
-      // 2. Custom Metrics from backend agentIdMapping (15% - was 30%)
+      // 2. Custom Metrics from backend agentIdMapping (25% - adjusted for 50% ERC-8004)
       // Since we removed custom contract, use backend agent data
       let customScore = 0;
       try {
@@ -361,9 +361,9 @@ class ReputationService {
       } catch (e) {
         console.warn('Could not fetch custom score:', e.message);
       }
-      const customWeight = 0.15; // CHANGED: 30% -> 15%
+      const customWeight = 0.25; // CHANGED: 15% -> 25% (adjusted for 50% ERC-8004)
       
-      // 3. Transaction Success Rate (10% - was 20%)
+      // 3. Transaction Success Rate (15% - adjusted for 50% ERC-8004)
       // Since we removed custom contract, estimate from reputation feedback
       let successfulTxs = 0;
       let totalInteractions = [];
@@ -379,9 +379,9 @@ class ReputationService {
       const transactionSuccessRate = totalInteractionsCount > 0 
         ? Math.min(100, (successfulTxs / totalInteractionsCount) * 100)
         : 50; // Default 50% if no transactions yet
-      const txWeight = 0.1; // CHANGED: 20% -> 10%
+      const txWeight = 0.15; // CHANGED: 10% -> 15% (adjusted for 50% ERC-8004)
       
-      // 4. Payment Completion Rate (5% - was 10%)
+      // 4. Payment Completion Rate (10% - adjusted for 50% ERC-8004)
       let reputation = [];
       try {
         reputation = await this.getAgentReputation(agentAddress);
@@ -395,7 +395,7 @@ class ReputationService {
       const paymentCompletionRate = reputation.length > 0
         ? Math.min(100, (paymentsWithFeedback.length / reputation.length) * 100)
         : 50; // Default 50%
-      const paymentWeight = 0.05; // CHANGED: 10% -> 5%
+      const paymentWeight = 0.1; // CHANGED: 5% -> 10% (adjusted for 50% ERC-8004)
       
       // Adjust weights if ERC-8004 not available
       let finalCustomWeight = customWeight;
@@ -453,7 +453,7 @@ class ReputationService {
           paymentCompletion: finalPaymentWeight
         },
         formula: erc8004Count > 0 
-          ? 'ERC-8004 (70%) + Custom (15%) + Tx Success (10%) + Payment Completion (5%)'
+          ? 'ERC-8004 (50%) + Custom (25%) + Tx Success (15%) + Payment Completion (10%)'
           : 'Custom (50%) + Tx Success (30%) + Payment Completion (20%)'
       };
     } catch (error) {

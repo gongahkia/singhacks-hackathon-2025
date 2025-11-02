@@ -724,8 +724,7 @@ class AgentService {
       
       // Parse metadata from ERC-8004
       let parsedMetadata = {};
-      try {
-        if (ercAgent.metadata?.agentName) {
+      try {        if (ercAgent.metadata?.agentName) {
           parsedMetadata.agentName = ercAgent.metadata.agentName;
         }
       } catch (e) {}

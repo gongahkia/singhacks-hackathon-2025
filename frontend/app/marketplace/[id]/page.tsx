@@ -4,9 +4,11 @@ import { useState, use, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { Star, Download, Shield, ArrowLeft, Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Star, Download, Shield, ArrowLeft, Check, ChevronDown, ChevronUp, MessageSquare } from "lucide-react"
 import { ProtocolBadge, ProtocolInfoPanel } from "@/components/protocol-badge"
 import { ConnectAgentWallet } from "@/components/connect-agent-wallet"
+import { AgentFeedbackModal } from "@/components/agent-feedback-modal"
+import { useAccount } from "wagmi"
 
 interface Agent {
   name: string
@@ -39,6 +41,8 @@ export default function AgentDetailPage({ params }: PageProps) {
   const [pollingActive, setPollingActive] = useState(false)
   const [hybridTrust, setHybridTrust] = useState<any>(null)
   const [connectedWallets, setConnectedWallets] = useState<any[]>([])
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
+  const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
 
   useEffect(() => {
     fetchAgent()
@@ -216,12 +220,13 @@ export default function AgentDetailPage({ params }: PageProps) {
     )
   }
 
-  const handleConnect = () => {
-    setIsConnecting(true)
-    setTimeout(() => {
-      setIsConnected(true)
-      setIsConnecting(false)
-    }, 1000)
+  const handleFeedbackSuccess = () => {
+    // Refresh trust score after feedback submission
+    if (agent?.address) {
+      setTimeout(() => {
+        fetchHybridTrust()
+      }, 2000) // Wait a bit for on-chain update
+    }
   }
 
   return (
@@ -420,34 +425,41 @@ export default function AgentDetailPage({ params }: PageProps) {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Connect Button */}
+            {/* Feedback Button */}
             <div className="border border-border p-6">
               <button
-                onClick={handleConnect}
-                disabled={isConnected || isConnecting}
-                className={`w-full py-4 text-lg font-semibold transition-all ${
-                  isConnected
-                    ? "bg-foreground/10 text-foreground cursor-default"
-                    : "bg-foreground text-background hover:bg-foreground/90"
-                } ${isConnecting ? "opacity-50 cursor-wait" : ""}`}
+                onClick={() => setFeedbackModalOpen(true)}
+                disabled={!isWalletConnected}
+                className={`w-full py-4 text-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                  isWalletConnected
+                    ? "bg-foreground text-background hover:bg-foreground/90"
+                    : "bg-foreground/10 text-foreground/40 cursor-not-allowed"
+                }`}
               >
-                {isConnecting ? (
-                  "Connecting..."
-                ) : isConnected ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Check className="w-5 h-5" />
-                    Connected
-                  </span>
-                ) : (
-                  "Connect Agent"
-                )}
+                <MessageSquare className="w-5 h-5" />
+                {isWalletConnected ? "Submit Feedback" : "Connect Wallet to Feedback"}
               </button>
-              {isConnected && (
+              {!isWalletConnected && (
                 <p className="text-sm text-foreground/60 mt-3 text-center">
-                  Agent successfully connected to your wallet
+                  Connect your wallet to submit feedback
+                </p>
+              )}
+              {isWalletConnected && (
+                <p className="text-sm text-foreground/60 mt-3 text-center">
+                  Share your experience and update the agent's trust score
                 </p>
               )}
             </div>
+            
+            {/* Feedback Modal */}
+            <AgentFeedbackModal
+              open={feedbackModalOpen}
+              onOpenChange={setFeedbackModalOpen}
+              agentAddress={agent.address}
+              agentName={agent.name}
+              agentId={agent.erc8004AgentId}
+              onSuccess={handleFeedbackSuccess}
+            />
 
             {/* Stats */}
             <div className="border border-border p-6">
