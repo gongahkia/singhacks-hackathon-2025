@@ -5,6 +5,8 @@ import { apiClient } from './lib/api-client'
 import { getAgentTransactions, AgentTxRecord } from '../lib/tx-store'
 import { NetworkStatus } from '../components/network-status'
 import Link from 'next/link'
+import { Badge } from '../components/ui/badge'
+import { Shield, ExternalLink } from 'lucide-react'
 
 type Health = { status: string; timestamp: string; network?: string; version?: string }
 
@@ -100,9 +102,45 @@ export default function App() {
               </div>
             ) : agents && agents.length > 0 ? (
               <div className="space-y-4">
-                <pre className="bg-foreground/5 border border-border p-4 overflow-auto text-sm font-mono">
-{JSON.stringify(agents, null, 2)}
-                </pre>
+                {/* Agent Bar List */}
+                <div className="space-y-2">
+                  {agents.map((agent: any, index: number) => (
+                    <Link
+                      key={agent.address || agent.agentId || index}
+                      href={`/marketplace/${agent.agentId || agent.address}`}
+                      className="flex items-center justify-between p-4 border border-border hover:border-foreground/40 hover:bg-accent/30 transition-all group"
+                    >
+                      {/* Left: Agent Name */}
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-semibold group-hover:text-foreground/80 transition-colors truncate">
+                            {agent.name || 'Unnamed Agent'}
+                          </h3>
+                          <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+                            {agent.address}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right: Trust Score */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-4 h-4 text-foreground/60" />
+                          <span className="text-sm text-foreground/60">Trust:</span>
+                          <Badge 
+                            variant={parseInt(agent.trustScore) >= 70 ? "default" : parseInt(agent.trustScore) >= 50 ? "secondary" : "outline"}
+                            className="font-semibold"
+                          >
+                            {agent.trustScore || '0'}
+                          </Badge>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Link to Marketplace */}
                 <Link
                   href="/marketplace"
                   className="inline-block px-6 py-3 border border-border hover:bg-accent transition-colors font-medium"

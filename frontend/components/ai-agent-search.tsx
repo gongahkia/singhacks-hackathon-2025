@@ -102,9 +102,9 @@ export function AIAgentSearch() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {results.map((agent) => (
+            {results.map((agent, index) => (
               <Link
-                key={agent.address}
+                key={agent.accountId || `${agent.address}-${index}`}
                 href={`/marketplace/${agent.address}`}
                 className="border border-border p-4 rounded-none hover:shadow-lg transition-all hover:border-foreground/50"
               >
